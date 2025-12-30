@@ -34,9 +34,9 @@ jobs:
           if [[ "${{ github.ref }}" == refs/tags/v* ]]; then
             VERSION="${GITHUB_REF#refs/tags/v}"
           else
-            # 手动触发时使用日期和短 commit hash
+            # 手动触发时使用 semver 格式: 0.0.0-dev.YYYYMMDD.短hash
             SHORT_SHA=$(echo "${{ github.sha }}" | cut -c1-7)
-            VERSION="dev-$(date +%Y%m%d)-${SHORT_SHA}"
+            VERSION="0.0.0-dev.$(date +%Y%m%d).${SHORT_SHA}"
           fi
           echo "version=$VERSION" >> $GITHUB_OUTPUT
           echo "version_tag=v$VERSION" >> $GITHUB_OUTPUT
