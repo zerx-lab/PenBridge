@@ -17,7 +17,7 @@ import {
   getJuejinCookies,
 } from "../services/juejinAuth";
 import { createJuejinApiClient } from "../services/juejinApi";
-import { articleSyncService } from "../services/articleSync";
+import { articleSyncService, PlatformNotLoggedInError } from "../services/articleSync";
 import { schedulerService } from "../services/scheduler";
 import { emailService } from "../services/emailService";
 import { cleanupUnusedImages, deleteAllArticleImages } from "../services/imageCleanup";
@@ -35,7 +35,7 @@ import { AppDataSource } from "../db";
 import { Article, ArticleStatus } from "../entities/Article";
 import { User } from "../entities/User";
 import { Folder } from "../entities/Folder";
-import { ScheduledTask, TaskStatus, Platform, TencentPublishConfig } from "../entities/ScheduledTask";
+import { ScheduledTask, TaskStatus, Platform, TencentPublishConfig, JuejinPublishConfig, PlatformConfig } from "../entities/ScheduledTask";
 import { EmailConfig } from "../entities/EmailConfig";
 import { AdminRole } from "../entities/AdminUser";
 
@@ -106,6 +106,24 @@ const isSuperAdmin = t.middleware(async ({ ctx, next }) => {
 // 受保护的 procedure
 const protectedProcedure = t.procedure.use(isAuthed);
 const superAdminProcedure = t.procedure.use(isSuperAdmin);
+
+/**
+ * 包装可能抛出平台未登录错误的异步调用
+ * 将 PlatformNotLoggedInError 转换为 PRECONDITION_FAILED TRPCError
+ */
+async function wrapPlatformCall<T>(fn: () => Promise<T>): Promise<T> {
+  try {
+    return await fn();
+  } catch (error) {
+    if (error instanceof PlatformNotLoggedInError) {
+      throw new TRPCError({
+        code: "PRECONDITION_FAILED",
+        message: error.message,
+      });
+    }
+    throw error;
+  }
+}
 
 export const appRouter = t.router({
   // 健康检查（无需认证）
@@ -518,28 +536,28 @@ export const appRouter = t.router({
     syncToDraft: protectedProcedure
       .input(z.object({ id: z.number() }))
       .mutation(async ({ input }) => {
-        return articleSyncService.syncToDraft(input.id);
+        return wrapPlatformCall(() => articleSyncService.syncToDraft(input.id));
       }),
 
     // 使用 API 发布文章
     publishViaApi: protectedProcedure
       .input(z.object({ id: z.number() }))
       .mutation(async ({ input }) => {
-        return articleSyncService.publishArticle(input.id);
+        return wrapPlatformCall(() => articleSyncService.publishArticle(input.id));
       }),
 
     // 删除腾讯云草稿
     deleteDraft: protectedProcedure
       .input(z.object({ id: z.number() }))
       .mutation(async ({ input }) => {
-        return articleSyncService.deleteDraft(input.id);
+        return wrapPlatformCall(() => articleSyncService.deleteDraft(input.id));
       }),
 
     // 搜索标签
     searchTags: protectedProcedure
       .input(z.object({ keyword: z.string() }))
       .query(async ({ input }) => {
-        return articleSyncService.searchTags(input.keyword);
+        return wrapPlatformCall(() => articleSyncService.searchTags(input.keyword));
       }),
 
     // 设置文章标签
@@ -551,7 +569,7 @@ export const appRouter = t.router({
         })
       )
       .mutation(async ({ input }) => {
-        return articleSyncService.setArticleTags(input.id, input.tagIds);
+        return wrapPlatformCall(() => articleSyncService.setArticleTags(input.id, input.tagIds));
       }),
 
     // 设置文章来源类型
@@ -563,12 +581,12 @@ export const appRouter = t.router({
         })
       )
       .mutation(async ({ input }) => {
-        return articleSyncService.setSourceType(input.id, input.sourceType);
+        return wrapPlatformCall(() => articleSyncService.setSourceType(input.id, input.sourceType));
       }),
 
     // 获取腾讯云草稿列表
     fetchTencentDrafts: protectedProcedure.query(async () => {
-      return articleSyncService.fetchTencentDrafts();
+      return wrapPlatformCall(() => articleSyncService.fetchTencentDrafts());
     }),
 
     // 获取腾讯云文章列表
@@ -581,7 +599,7 @@ export const appRouter = t.router({
         })
       )
       .query(async ({ input }) => {
-        return articleSyncService.fetchTencentArticles(input);
+        return wrapPlatformCall(() => articleSyncService.fetchTencentArticles(input));
       }),
 
     // 检查 API 登录状态
@@ -601,22 +619,22 @@ export const appRouter = t.router({
         })
       )
       .query(async ({ input }) => {
-        return articleSyncService.fetchCreatorArticles(input);
+        return wrapPlatformCall(() => articleSyncService.fetchCreatorArticles(input));
       }),
 
     // 获取文章状态统计
     fetchArticleStatusCount: protectedProcedure.query(async () => {
-      return articleSyncService.fetchArticleStatusCount();
+      return wrapPlatformCall(() => articleSyncService.fetchArticleStatusCount());
     }),
 
     // 同步并匹配本地文章与腾讯云文章状态
     syncArticleStatus: protectedProcedure.mutation(async () => {
-      return articleSyncService.syncArticleStatus();
+      return wrapPlatformCall(() => articleSyncService.syncArticleStatus());
     }),
 
     // 获取审核失败的文章列表（包含失败原因）
     fetchRejectedArticles: protectedProcedure.query(async () => {
-      return articleSyncService.fetchRejectedArticles();
+      return wrapPlatformCall(() => articleSyncService.fetchRejectedArticles());
     }),
   }),
 
@@ -845,21 +863,45 @@ export const appRouter = t.router({
           articleId: z.number(),
           platform: z.nativeEnum(Platform).default(Platform.TENCENT),
           scheduledAt: z.string().datetime(),
-          config: z.object({
+          // 腾讯云配置
+          tencentConfig: z.object({
             tagIds: z.array(z.number()),
             tagNames: z.array(z.string()).optional(),
             sourceType: z.union([z.literal(1), z.literal(2), z.literal(3)]),
             summary: z.string().optional(),
-          }),
+          }).optional(),
+          // 掘金配置
+          juejinConfig: z.object({
+            categoryId: z.string(),
+            categoryName: z.string().optional(),
+            tagIds: z.array(z.string()),
+            tagNames: z.array(z.string()).optional(),
+            briefContent: z.string(),
+            isOriginal: z.union([z.literal(0), z.literal(1)]),
+          }).optional(),
         })
       )
       .mutation(async ({ input }) => {
+        // 根据平台选择配置
+        let config: PlatformConfig;
+        if (input.platform === Platform.JUEJIN) {
+          if (!input.juejinConfig) {
+            throw new Error("缺少掘金发布配置");
+          }
+          config = input.juejinConfig as JuejinPublishConfig;
+        } else {
+          if (!input.tencentConfig) {
+            throw new Error("缺少腾讯云发布配置");
+          }
+          config = input.tencentConfig as TencentPublishConfig;
+        }
+
         const task = await schedulerService.createTask({
           articleId: input.articleId,
           userId: 1, // 简化处理
           platform: input.platform,
           scheduledAt: new Date(input.scheduledAt),
-          config: input.config as TencentPublishConfig,
+          config,
         });
         return task;
       }),
@@ -877,31 +919,48 @@ export const appRouter = t.router({
       .input(
         z.object({
           taskId: z.number(),
+          platform: z.nativeEnum(Platform).optional(),
           scheduledAt: z.string().datetime().optional(),
-          config: z.object({
+          // 腾讯云配置
+          tencentConfig: z.object({
             tagIds: z.array(z.number()),
             tagNames: z.array(z.string()).optional(),
             sourceType: z.union([z.literal(1), z.literal(2), z.literal(3)]),
             summary: z.string().optional(),
           }).optional(),
+          // 掘金配置
+          juejinConfig: z.object({
+            categoryId: z.string(),
+            categoryName: z.string().optional(),
+            tagIds: z.array(z.string()),
+            tagNames: z.array(z.string()).optional(),
+            briefContent: z.string(),
+            isOriginal: z.union([z.literal(0), z.literal(1)]),
+          }).optional(),
         })
       )
       .mutation(async ({ input }) => {
-        const updates: { scheduledAt?: Date; config?: TencentPublishConfig } = {};
+        const updates: { scheduledAt?: Date; config?: PlatformConfig } = {};
         if (input.scheduledAt) {
           updates.scheduledAt = new Date(input.scheduledAt);
         }
-        if (input.config) {
-          updates.config = input.config as TencentPublishConfig;
+        // 根据平台选择配置
+        if (input.juejinConfig) {
+          updates.config = input.juejinConfig as JuejinPublishConfig;
+        } else if (input.tencentConfig) {
+          updates.config = input.tencentConfig as TencentPublishConfig;
         }
         return schedulerService.updateTask(input.taskId, 1, updates);
       }),
 
     // 获取文章的定时任务
     getByArticle: protectedProcedure
-      .input(z.object({ articleId: z.number() }))
+      .input(z.object({ 
+        articleId: z.number(),
+        platform: z.nativeEnum(Platform).optional(),
+      }))
       .query(async ({ input }) => {
-        return schedulerService.getArticleTask(input.articleId);
+        return schedulerService.getArticleTask(input.articleId, input.platform);
       }),
 
     // 获取用户的定时任务列表
@@ -1089,7 +1148,7 @@ export const appRouter = t.router({
         const cookies = await getJuejinCookies();
         if (!cookies) {
           throw new TRPCError({
-            code: "UNAUTHORIZED",
+            code: "PRECONDITION_FAILED",
             message: "请先登录掘金账号",
           });
         }
@@ -1104,7 +1163,7 @@ export const appRouter = t.router({
       const cookies = await getJuejinCookies();
       if (!cookies) {
         throw new TRPCError({
-          code: "UNAUTHORIZED",
+          code: "PRECONDITION_FAILED",
           message: "请先登录掘金账号",
         });
       }
@@ -1154,7 +1213,7 @@ export const appRouter = t.router({
         const cookies = await getJuejinCookies();
         if (!cookies) {
           throw new TRPCError({
-            code: "UNAUTHORIZED",
+            code: "PRECONDITION_FAILED",
             message: "请先登录掘金账号",
           });
         }
@@ -1312,7 +1371,7 @@ export const appRouter = t.router({
         const cookies = await getJuejinCookies();
         if (!cookies) {
           throw new TRPCError({
-            code: "UNAUTHORIZED",
+            code: "PRECONDITION_FAILED",
             message: "请先登录掘金账号",
           });
         }
@@ -1385,7 +1444,7 @@ export const appRouter = t.router({
         const cookies = await getJuejinCookies();
         if (!cookies) {
           throw new TRPCError({
-            code: "UNAUTHORIZED",
+            code: "PRECONDITION_FAILED",
             message: "请先登录掘金账号",
           });
         }
@@ -1433,12 +1492,34 @@ export const appRouter = t.router({
         }
       }),
 
+    // 获取掘金文章状态统计
+    fetchArticleStatusCount: protectedProcedure.query(async () => {
+      const cookies = await getJuejinCookies();
+      if (!cookies) {
+        throw new TRPCError({
+          code: "PRECONDITION_FAILED",
+          message: "请先登录掘金账号",
+        });
+      }
+
+      try {
+        const client = createJuejinApiClient(cookies);
+        return client.fetchArticleStatusCount();
+      } catch (error) {
+        console.error("[Juejin] 获取文章状态统计失败:", error);
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: error instanceof Error ? error.message : "获取失败",
+        });
+      }
+    }),
+
     // 同步本地文章与掘金文章状态
     syncArticleStatus: protectedProcedure.mutation(async () => {
       const cookies = await getJuejinCookies();
       if (!cookies) {
         throw new TRPCError({
-          code: "UNAUTHORIZED",
+          code: "PRECONDITION_FAILED",
           message: "请先登录掘金账号",
         });
       }
@@ -1473,45 +1554,116 @@ export const appRouter = t.router({
           pageNo++;
         }
 
-        // 获取本地所有已发布到掘金的文章
+        // 获取本地所有文章（不仅是已发布到掘金的）
         const localArticles = await articleRepo.find({
-          where: { juejinArticleId: Not(IsNull()) },
+          where: { userId: 1 },
+          order: { createdAt: "DESC" },
         });
 
         let syncedCount = 0;
-        const updates: Array<{ id: number; status: string; articleId: string }> = [];
+        let matchedCount = 0;
+        const updates: Array<{ id: number; status: string; articleId: string; matchType?: string }> = [];
+
+        // 辅助函数：根据掘金审核状态获取本地状态
+        const getLocalStatus = (auditStatus: number, currentStatus?: string): string => {
+          switch (auditStatus) {
+            case 2:
+              return "published";
+            case 1:
+              return "pending";
+            case 3:
+              return "rejected";
+            default:
+              return currentStatus || "unknown";
+          }
+        };
 
         for (const local of localArticles) {
-          const juejinArticle = allJuejinArticles.find(
-            (a) => a.article_id === local.juejinArticleId
-          );
+          let juejinArticle: typeof allJuejinArticles[0] | undefined;
+          let matchType: "id" | "title" | undefined;
+
+          // 优先通过 juejinArticleId 匹配
+          if (local.juejinArticleId) {
+            juejinArticle = allJuejinArticles.find(
+              (a) => a.article_id === local.juejinArticleId
+            );
+            if (juejinArticle) {
+              matchType = "id";
+            }
+          }
+
+          // 如果没有通过 ID 匹配，尝试通过标题匹配
+          if (!juejinArticle) {
+            juejinArticle = allJuejinArticles.find(
+              (a) => a.article_info.title.trim() === local.title.trim()
+            );
+            if (juejinArticle) {
+              matchType = "title";
+              console.log(`[Juejin] 通过标题匹配到文章: "${local.title}" -> ${juejinArticle.article_id}`);
+            }
+          }
 
           if (juejinArticle) {
-            // 根据掘金的审核状态更新本地状态
-            let newStatus: string;
-            switch (juejinArticle.article_info.audit_status) {
-              case 2:
-                newStatus = "published";
-                break;
-              case 1:
-                newStatus = "pending";
-                break;
-              case 3:
-                newStatus = "rejected";
-                break;
-              default:
-                newStatus = local.juejinStatus || "unknown";
-            }
+            matchedCount++;
+            const newStatus = getLocalStatus(juejinArticle.article_info.audit_status, local.juejinStatus);
+            const oldStatus = local.juejinStatus;
+            
+            // 更新掘金文章ID（如果是通过标题匹配的，需要保存ID）
+            const needsIdUpdate = !local.juejinArticleId || local.juejinArticleId !== juejinArticle.article_id;
+            const needsStatusUpdate = local.juejinStatus !== newStatus;
 
-            if (local.juejinStatus !== newStatus) {
-              local.juejinStatus = newStatus;
-              local.juejinLastSyncedAt = new Date();
-              await articleRepo.save(local);
+            if (needsIdUpdate || needsStatusUpdate) {
+              // 使用 update 只更新掘金相关字段，避免覆盖其他平台字段
+              const updateData: Partial<Article> = {
+                juejinArticleId: juejinArticle.article_id,
+                juejinArticleUrl: `https://juejin.cn/post/${juejinArticle.article_id}`,
+                juejinStatus: newStatus,
+                juejinLastSyncedAt: new Date(),
+              };
+              // 同步草稿ID
+              if (juejinArticle.article_info.draft_id) {
+                updateData.juejinDraftId = juejinArticle.article_info.draft_id;
+              }
+              await articleRepo.update(local.id, updateData);
+              
+              if (needsStatusUpdate) {
+                syncedCount++;
+                updates.push({
+                  id: local.id,
+                  status: newStatus,
+                  articleId: juejinArticle.article_id,
+                  matchType,
+                });
+                console.log(`[Juejin] 文章状态已更新: ${oldStatus} -> ${newStatus} (${matchType}匹配)`);
+              }
+            }
+          } else {
+            // 掘金上找不到对应文章
+            // 如果本地有掘金相关状态但远程没有匹配，说明需要重置
+            const hasJuejinData = local.juejinArticleId || local.juejinStatus;
+            const needsReset = hasJuejinData && local.juejinStatus !== "draft";
+            
+            if (needsReset) {
+              const oldArticleId = local.juejinArticleId || "unknown";
+              const oldStatus = local.juejinStatus;
+              console.log(`[Juejin] 文章在掘金上已不存在，重置状态: ${local.title} (原状态: ${oldStatus})`);
+              
+              // 使用 update 只更新掘金相关字段，避免覆盖其他平台字段
+              // 注意：TypeORM 中 null 表示清除字段值
+              await articleRepo.update(local.id, {
+                juejinStatus: null as any,
+                juejinArticleId: null as any,
+                juejinArticleUrl: null as any,
+                juejinDraftId: null as any,
+                juejinLastSyncedAt: new Date(),
+              });
+              console.log(`[Juejin] 已重置掘金字段 (使用 update)`);
+              
               syncedCount++;
               updates.push({
                 id: local.id,
-                status: newStatus,
-                articleId: local.juejinArticleId!,
+                status: "deleted",
+                articleId: oldArticleId,
               });
             }
           }
@@ -1519,8 +1671,9 @@ export const appRouter = t.router({
 
         return {
           success: true,
-          message: `同步完成，更新了 ${syncedCount} 篇文章状态`,
+          message: `同步完成: ${matchedCount}/${localArticles.length} 篇文章匹配成功，${syncedCount} 篇状态有更新`,
           syncedCount,
+          matchedCount,
           updates,
         };
       } catch (error) {

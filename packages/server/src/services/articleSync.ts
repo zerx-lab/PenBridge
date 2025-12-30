@@ -7,6 +7,20 @@ import * as path from "path";
 import { AppDataSource } from "../db";
 import { Article, ArticleStatus } from "../entities/Article";
 import { User } from "../entities/User";
+
+/**
+ * 第三方平台未登录错误
+ * 用于区分第三方平台登录失效和系统本身的认证失效
+ */
+export class PlatformNotLoggedInError extends Error {
+  public readonly platform: string;
+  
+  constructor(platform: string, message: string) {
+    super(message);
+    this.name = "PlatformNotLoggedInError";
+    this.platform = platform;
+  }
+}
 import {
   TencentApiClient,
   createTencentApiClient,
@@ -14,7 +28,7 @@ import {
   CreatorArticleInfo,
   ArticleStatusCount,
 } from "./tencentApi";
-import { processArticleImages, hasLocalImages } from "./imageUpload";
+import { processArticleImages, hasImagesToUpload } from "./imageUpload";
 
 // 图片上传目录（与 index.ts 保持一致）
 const UPLOAD_DIR = path.resolve("data/uploads");
@@ -71,12 +85,8 @@ export class ArticleSyncService {
       user = await userRepository.findOne({ where: { isLoggedIn: true } });
     }
 
-    if (!user) {
-      throw new Error("未找到用户");
-    }
-
-    if (!user.isLoggedIn || !user.cookies) {
-      throw new Error("用户未登录，请先登录腾讯云开发者社区");
+    if (!user || !user.isLoggedIn || !user.cookies) {
+      throw new PlatformNotLoggedInError("tencent", "请先登录腾讯云开发者社区");
     }
 
     return createTencentApiClient(user.cookies);
@@ -98,10 +108,10 @@ export class ArticleSyncService {
 
       const client = await this.getApiClient(userId);
 
-      // 处理文章中的本地图片和 base64 图片，上传到腾讯云 COS
+      // 处理文章中的图片，上传到腾讯云 COS
       let contentToSync = article.content;
-      if (hasLocalImages(article.content)) {
-        console.log("[ArticleSync] 检测到本地图片或 base64 图片，开始上传到腾讯云...");
+      if (hasImagesToUpload(article.content, "tencent")) {
+        console.log("[ArticleSync] 检测到需要上传的图片，开始上传到腾讯云...");
         try {
           const { content: processedContent, results } = await processArticleImages(
             article.content,
@@ -221,10 +231,10 @@ export class ArticleSyncService {
 
       const client = await this.getApiClient(userId);
 
-      // 处理文章中的本地图片，上传到腾讯云 COS
+      // 处理文章中的图片，上传到腾讯云 COS
       let contentToPublish = article.content;
-      if (hasLocalImages(article.content)) {
-        console.log("[ArticleSync] 检测到本地图片，开始上传到腾讯云...");
+      if (hasImagesToUpload(article.content, "tencent")) {
+        console.log("[ArticleSync] 检测到需要上传的图片，开始上传到腾讯云...");
         try {
           const { content: processedContent, results } = await processArticleImages(
             article.content,
@@ -617,6 +627,8 @@ export class ArticleSyncService {
 
       // 匹配本地文章与腾讯云文章
       const matchResults: ArticleMatchResult[] = [];
+      // 统计状态真正发生变化的文章数量
+      let statusChangedCount = 0;
 
       for (const localArticle of localArticles) {
         const matchResult: ArticleMatchResult = {
@@ -646,8 +658,11 @@ export class ArticleSyncService {
               matchResult.rejectTime = matched.rejectInfo.auditTime;
             }
 
-            // 更新本地文章状态
-            await this.updateLocalArticleStatus(localArticle, matched);
+            // 更新本地文章状态，并检查是否真正发生了变化
+            const changed = await this.updateLocalArticleStatus(localArticle, matched);
+            if (changed) {
+              statusChangedCount++;
+            }
           }
         }
 
@@ -673,7 +688,10 @@ export class ArticleSyncService {
 
             // 更新本地文章的腾讯云ID和状态
             localArticle.tencentArticleId = matched.articleId.toString();
-            await this.updateLocalArticleStatus(localArticle, matched);
+            const changed = await this.updateLocalArticleStatus(localArticle, matched);
+            if (changed) {
+              statusChangedCount++;
+            }
           }
         }
 
@@ -681,6 +699,7 @@ export class ArticleSyncService {
         // 重置为本地草稿状态
         if (!matchResult.matched && (localArticle.tencentArticleId || localArticle.tencentDraftId)) {
           console.log(`[ArticleSync] 文章未在腾讯云找到匹配，重置为本地草稿: ${localArticle.title}`);
+          const oldStatus = localArticle.status;
           localArticle.tencentArticleId = undefined;
           localArticle.tencentDraftId = undefined;
           localArticle.tencentArticleUrl = undefined;
@@ -688,19 +707,19 @@ export class ArticleSyncService {
           localArticle.errorMessage = undefined;
           localArticle.lastSyncedAt = new Date();
           await this.articleRepo.save(localArticle);
+          if (oldStatus !== ArticleStatus.DRAFT) {
+            statusChangedCount++;
+          }
         }
 
         matchResults.push(matchResult);
       }
 
       const matchedCount = matchResults.filter((r) => r.matched).length;
-      const rejectedCount = matchResults.filter(
-        (r) => r.tencentStatus === 3
-      ).length;
 
       return {
         success: true,
-        message: `同步完成: ${matchedCount}/${localArticles.length} 篇文章匹配成功，${rejectedCount} 篇审核未通过`,
+        message: `同步完成: ${matchedCount}/${localArticles.length} 篇文章匹配成功，${statusChangedCount} 篇状态有更新`,
         matchResults,
         statusCount,
       };
@@ -732,49 +751,70 @@ export class ArticleSyncService {
    * - hostStatus=2 且 status!=2: 审核中
    * - hostStatus=3: 未通过
    * - hostStatus=4: 回收站
+   * 
+   * @returns true 如果状态发生了变化，false 如果状态没有变化
    */
   private async updateLocalArticleStatus(
     localArticle: Article,
     tencentArticle: CreatorArticleInfo
-  ): Promise<void> {
+  ): Promise<boolean> {
     console.log(`[ArticleSync] 更新文章状态: articleId=${tencentArticle.articleId}, hostStatus=${tencentArticle.hostStatus}, status=${tencentArticle.status}`);
     
-    // 根据腾讯云状态更新本地状态
+    // 保存旧状态用于比较
+    const oldStatus = localArticle.status;
+    
+    // 计算新状态
+    let newStatus: ArticleStatus;
+    let errorMessage: string | undefined = undefined;
+    
+    // 根据腾讯云状态计算本地状态
     if (tencentArticle.hostStatus === 2) {
       // hostStatus=2 表示已提交发布，需要结合 status 判断
       if (tencentArticle.status === 2) {
         // hostStatus=2 且 status=2: 发布成功
-        localArticle.status = ArticleStatus.PUBLISHED;
-        localArticle.errorMessage = undefined;
+        newStatus = ArticleStatus.PUBLISHED;
       } else {
         // hostStatus=2 但 status!=2: 审核中
-        localArticle.status = ArticleStatus.PENDING;
-        localArticle.errorMessage = undefined;
+        newStatus = ArticleStatus.PENDING;
       }
     } else if (tencentArticle.hostStatus === 1) {
       // 旧版已发布状态（兼容）
-      localArticle.status = ArticleStatus.PUBLISHED;
-      localArticle.errorMessage = undefined;
+      newStatus = ArticleStatus.PUBLISHED;
     } else if (tencentArticle.hostStatus === 3) {
       // 未通过
-      localArticle.status = ArticleStatus.FAILED;
-      localArticle.errorMessage = tencentArticle.rejectInfo?.reason;
+      newStatus = ArticleStatus.FAILED;
+      errorMessage = tencentArticle.rejectInfo?.reason;
     } else if (tencentArticle.hostStatus === 4) {
       // 回收站
-      localArticle.status = ArticleStatus.FAILED;
-      localArticle.errorMessage = "文章已被移入回收站";
+      newStatus = ArticleStatus.FAILED;
+      errorMessage = "文章已被移入回收站";
     } else {
       // 其他未知状态，默认审核中
-      localArticle.status = ArticleStatus.PENDING;
-      localArticle.errorMessage = undefined;
+      newStatus = ArticleStatus.PENDING;
     }
 
-    // 更新腾讯云文章ID
+    // 使用 update 只更新腾讯云相关字段，避免覆盖其他平台字段
+    await this.articleRepo.update(localArticle.id, {
+      status: newStatus,
+      errorMessage: errorMessage,
+      tencentArticleId: tencentArticle.articleId.toString(),
+      tencentArticleUrl: `https://cloud.tencent.com/developer/article/${tencentArticle.articleId}`,
+      lastSyncedAt: new Date(),
+    });
+    
+    // 同步更新内存中的对象（供后续逻辑使用）
+    localArticle.status = newStatus;
+    localArticle.errorMessage = errorMessage;
     localArticle.tencentArticleId = tencentArticle.articleId.toString();
     localArticle.tencentArticleUrl = `https://cloud.tencent.com/developer/article/${tencentArticle.articleId}`;
     localArticle.lastSyncedAt = new Date();
-
-    await this.articleRepo.save(localArticle);
+    
+    // 返回状态是否发生了变化
+    const statusChanged = oldStatus !== newStatus;
+    if (statusChanged) {
+      console.log(`[ArticleSync] 文章状态已更新: ${oldStatus} -> ${newStatus}`);
+    }
+    return statusChanged;
   }
 
   /**

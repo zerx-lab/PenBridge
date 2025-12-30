@@ -30,6 +30,7 @@ import { trpc } from "@/utils/trpc";
 import TencentPublishDialog from "./TencentPublishDialog";
 import SchedulePublishDialog from "./SchedulePublishDialog";
 import JuejinPublishDialog from "./JuejinPublishDialog";
+import JuejinSchedulePublishDialog from "./JuejinSchedulePublishDialog";
 
 interface PublishMenuProps {
   articleId: number;
@@ -47,6 +48,7 @@ interface PublishMenuProps {
   juejinBriefContent?: string;
   juejinIsOriginal?: number;
   juejinStatus?: string;
+  juejinScheduledAt?: string;  // 掘金定时发布时间
   onSuccess?: () => void;
   /** 显示模式：button 显示完整按钮，icon 只显示图标 */
   variant?: "button" | "icon";
@@ -74,6 +76,7 @@ export function PublishMenu({
   juejinBriefContent = "",
   juejinIsOriginal = 1,
   juejinStatus,
+  juejinScheduledAt,
   onSuccess,
   variant = "button",
   disabled = false,
@@ -81,11 +84,18 @@ export function PublishMenu({
   const [publishDialogOpen, setPublishDialogOpen] = useState(false);
   const [scheduleDialogOpen, setScheduleDialogOpen] = useState(false);
   const [juejinPublishDialogOpen, setJuejinPublishDialogOpen] = useState(false);
+  const [juejinScheduleDialogOpen, setJuejinScheduleDialogOpen] = useState(false);
 
-  // 获取文章的定时任务
+  // 获取文章的腾讯云定时任务
   const { data: existingTask } = trpc.schedule.getByArticle.useQuery(
-    { articleId },
+    { articleId, platform: "tencent" as any },
     { enabled: articleStatus === "scheduled" }
+  );
+
+  // 获取文章的掘金定时任务
+  const { data: existingJuejinTask } = trpc.schedule.getByArticle.useQuery(
+    { articleId, platform: "juejin" as any },
+    { enabled: juejinStatus === "scheduled" }
   );
 
   const trpcUtils = trpc.useContext();
@@ -249,9 +259,22 @@ export function PublishMenu({
             <DropdownMenuSubContent className="w-40">
               {/* 可以发布到掘金（无论腾讯云状态如何，掘金独立判断） */}
               {(!juejinStatus || juejinStatus === "draft" || juejinStatus === "failed") && (
-                <DropdownMenuItem onClick={() => setJuejinPublishDialogOpen(true)}>
-                  <CloudUpload className="h-4 w-4 mr-2" />
-                  立即发布
+                <>
+                  <DropdownMenuItem onClick={() => setJuejinPublishDialogOpen(true)}>
+                    <CloudUpload className="h-4 w-4 mr-2" />
+                    立即发布
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setJuejinScheduleDialogOpen(true)}>
+                    <CalendarClock className="h-4 w-4 mr-2" />
+                    定时发布
+                  </DropdownMenuItem>
+                </>
+              )}
+
+              {juejinStatus === "scheduled" && (
+                <DropdownMenuItem onClick={() => setJuejinScheduleDialogOpen(true)}>
+                  <Edit className="h-4 w-4 mr-2" />
+                  编辑定时 {juejinScheduledAt && `(${formatScheduledTime(juejinScheduledAt)})`}
                 </DropdownMenuItem>
               )}
 
@@ -329,6 +352,24 @@ export function PublishMenu({
         juejinTagNames={juejinTagNames}
         juejinBriefContent={juejinBriefContent}
         juejinIsOriginal={juejinIsOriginal}
+        onSuccess={onSuccess}
+      />
+
+      {/* 掘金定时发布配置弹窗 */}
+      <JuejinSchedulePublishDialog
+        open={juejinScheduleDialogOpen}
+        onOpenChange={setJuejinScheduleDialogOpen}
+        articleId={articleId}
+        juejinCategoryId={juejinCategoryId}
+        juejinTagIds={juejinTagIds}
+        juejinTagNames={juejinTagNames}
+        juejinBriefContent={juejinBriefContent}
+        juejinIsOriginal={juejinIsOriginal}
+        existingTask={existingJuejinTask ? {
+          id: existingJuejinTask.id,
+          scheduledAt: existingJuejinTask.scheduledAt as unknown as string,
+          config: existingJuejinTask.config as any,
+        } : null}
         onSuccess={onSuccess}
       />
     </>

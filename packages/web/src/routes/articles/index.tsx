@@ -1,5 +1,5 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import {
   Plus,
   Pencil,
@@ -81,11 +81,15 @@ function ArticlesPage() {
     setIsSyncing(true);
     const results: SyncResult[] = [];
 
-    // 并行调用两个平台的同步
-    const [tencentResult, juejinResult] = await Promise.allSettled([
+    // 串行调用两个平台的同步，避免并发写入冲突
+    // 先同步腾讯云，再同步掘金
+    const tencentResult = await Promise.allSettled([
       syncTencentMutation.mutateAsync(),
+    ]).then(r => r[0]);
+    
+    const juejinResult = await Promise.allSettled([
       syncJuejinMutation.mutateAsync(),
-    ]);
+    ]).then(r => r[0]);
 
     // 处理腾讯云同步结果
     if (tencentResult.status === "fulfilled") {
@@ -124,50 +128,66 @@ function ArticlesPage() {
     }
 
     setIsSyncing(false);
-    refetch();
+    // 强制刷新文章列表缓存，确保显示最新状态
+    await trpcUtils.article.list.invalidate();
+    await refetch();
 
     // 合并结果在一个通知中展示
     if (results.length > 0) {
       const allSuccess = results.every((r) => r.success);
       const allFailed = results.every((r) => !r.success);
 
+      // 平台图标映射
+      const platformIcons: Record<string, React.ReactNode> = {
+        "腾讯云社区": <Cloud className="h-4 w-4" />,
+        "掘金": <Sparkles className="h-4 w-4" />,
+      };
+
       notification.open({
         message: allSuccess ? "同步成功" : allFailed ? "同步失败" : "同步完成",
         description: (
           <div className="space-y-2 mt-1">
             {results.map((result, index) => (
-              <div key={index} className="flex items-start gap-2">
+              <div key={index} className="flex items-center gap-2">
                 <span
                   className={cn(
-                    "shrink-0 text-xs font-medium px-1.5 py-0.5 rounded",
+                    "shrink-0 flex items-center justify-center w-6 h-6 rounded",
                     result.success
                       ? "bg-green-100 text-green-700"
                       : "bg-red-100 text-red-700"
                   )}
                 >
-                  {result.platform}
+                  {platformIcons[result.platform] || result.platform}
                 </span>
-                <span className="text-sm text-gray-600">{result.message}</span>
+                <span className="text-sm text-gray-600 whitespace-nowrap">{result.message}</span>
               </div>
             ))}
           </div>
         ),
         placement: "bottomRight",
         duration: 4,
+        style: { width: 420 },
         type: allSuccess ? "success" : allFailed ? "error" : "info",
       });
     }
   };
 
-  // 页面加载时自动同步状态
+  // 页面加载时自动同步状态（仅在组件首次挂载时执行一次）
+  const hasSyncedRef = useRef(false);
   useEffect(() => {
+    // 如果已经同步过或正在同步，直接返回
+    if (hasSyncedRef.current || isSyncing) {
+      return;
+    }
+    
     const needsTencentSync = data?.articles?.some(
       (a: any) => a.status === "pending" || a.tencentArticleId
     );
     const needsJuejinSync = data?.articles?.some(
       (a: any) => a.juejinStatus === "pending" || a.juejinArticleId
     );
-    if ((needsTencentSync || needsJuejinSync) && !isSyncing) {
+    if (needsTencentSync || needsJuejinSync) {
+      hasSyncedRef.current = true;
       handleSyncAll();
     }
   }, [data?.articles?.length]);

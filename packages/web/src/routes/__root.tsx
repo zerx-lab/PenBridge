@@ -63,6 +63,62 @@ function RootComponent() {
     },
   });
 
+  // 从 localStorage 恢复侧边栏状态和宽度（必须在条件 return 之前）
+  useEffect(() => {
+    const savedOpen = localStorage.getItem("sidebar-open");
+    if (savedOpen !== null) {
+      setSidebarOpen(savedOpen === "true");
+    }
+    const savedWidth = localStorage.getItem("sidebar-width");
+    if (savedWidth !== null) {
+      const width = parseInt(savedWidth, 10);
+      if (width >= SIDEBAR_MIN_WIDTH && width <= SIDEBAR_MAX_WIDTH) {
+        setSidebarWidth(width);
+      }
+    }
+  }, []);
+
+  // 开始拖拽调整宽度（必须在条件 return 之前）
+  const startResizing = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    setIsResizing(true);
+  }, []);
+
+  // 处理拖拽调整宽度（必须在条件 return 之前）
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!isResizing) return;
+
+      // 计算新宽度：鼠标位置 - 左侧功能栏宽度(48px)
+      const newWidth = e.clientX - 48;
+      const clampedWidth = Math.max(SIDEBAR_MIN_WIDTH, Math.min(SIDEBAR_MAX_WIDTH, newWidth));
+      setSidebarWidth(clampedWidth);
+    };
+
+    const handleMouseUp = () => {
+      if (isResizing) {
+        setIsResizing(false);
+        // 保存宽度到 localStorage
+        localStorage.setItem("sidebar-width", String(sidebarWidth));
+      }
+    };
+
+    if (isResizing) {
+      document.addEventListener("mousemove", handleMouseMove);
+      document.addEventListener("mouseup", handleMouseUp);
+      // 防止选中文本
+      document.body.style.userSelect = "none";
+      document.body.style.cursor = "col-resize";
+    }
+
+    return () => {
+      document.removeEventListener("mousemove", handleMouseMove);
+      document.removeEventListener("mouseup", handleMouseUp);
+      document.body.style.userSelect = "";
+      document.body.style.cursor = "";
+    };
+  }, [isResizing, sidebarWidth]);
+
   // 检查服务器配置和登录状态
   useEffect(() => {
     // 如果在设置页，不做任何跳转
@@ -81,6 +137,19 @@ function RootComponent() {
       navigate({ to: "/login" });
     }
   }, [location.pathname, navigate]);
+
+  // 保存侧边栏状态到 localStorage
+  const toggleSidebar = () => {
+    setSidebarOpen((prev) => {
+      const next = !prev;
+      localStorage.setItem("sidebar-open", String(next));
+      return next;
+    });
+  };
+
+  const handleLogout = () => {
+    logoutMutation.mutate();
+  };
 
   // 如果在设置页面，只显示 TitleBar 和内容
   if (location.pathname === "/setup") {
@@ -115,75 +184,6 @@ function RootComponent() {
   if (!isAuthenticated()) {
     return null;
   }
-
-  const handleLogout = () => {
-    logoutMutation.mutate();
-  };
-
-  // 从 localStorage 恢复侧边栏状态和宽度
-  useEffect(() => {
-    const savedOpen = localStorage.getItem("sidebar-open");
-    if (savedOpen !== null) {
-      setSidebarOpen(savedOpen === "true");
-    }
-    const savedWidth = localStorage.getItem("sidebar-width");
-    if (savedWidth !== null) {
-      const width = parseInt(savedWidth, 10);
-      if (width >= SIDEBAR_MIN_WIDTH && width <= SIDEBAR_MAX_WIDTH) {
-        setSidebarWidth(width);
-      }
-    }
-  }, []);
-
-  // 保存侧边栏状态到 localStorage
-  const toggleSidebar = () => {
-    setSidebarOpen((prev) => {
-      const next = !prev;
-      localStorage.setItem("sidebar-open", String(next));
-      return next;
-    });
-  };
-
-  // 开始拖拽调整宽度
-  const startResizing = useCallback((e: React.MouseEvent) => {
-    e.preventDefault();
-    setIsResizing(true);
-  }, []);
-
-  // 处理拖拽调整宽度
-  useEffect(() => {
-    const handleMouseMove = (e: MouseEvent) => {
-      if (!isResizing) return;
-
-      // 计算新宽度：鼠标位置 - 左侧功能栏宽度(48px)
-      const newWidth = e.clientX - 48;
-      const clampedWidth = Math.max(SIDEBAR_MIN_WIDTH, Math.min(SIDEBAR_MAX_WIDTH, newWidth));
-      setSidebarWidth(clampedWidth);
-    };
-
-    const handleMouseUp = () => {
-      if (isResizing) {
-        setIsResizing(false);
-        // 保存宽度到 localStorage
-        localStorage.setItem("sidebar-width", String(sidebarWidth));
-      }
-    };
-
-    if (isResizing) {
-      document.addEventListener("mousemove", handleMouseMove);
-      document.addEventListener("mouseup", handleMouseUp);
-      // 防止选中文本
-      document.body.style.userSelect = "none";
-      document.body.style.cursor = "col-resize";
-    }
-
-    return () => {
-      document.removeEventListener("mousemove", handleMouseMove);
-      document.removeEventListener("mouseup", handleMouseUp);
-      document.body.style.userSelect = "";
-      document.body.style.cursor = "";
-    };
-  }, [isResizing, sidebarWidth]);
 
   return (
     <App>

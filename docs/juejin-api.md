@@ -498,7 +498,303 @@ function parseSidGuard(sidGuard) {
 
 ---
 
-## 11. 图片上传
+## 11. 图片上传（ImageX 方式 - 推荐）
+
+掘金使用字节跳动的 **ImageX** 服务进行图片上传，这是一个完整的 5 步流程：
+
+### 上传流程概览
+
+```
+┌─────────────────────────┐
+│  Step 1: 获取上传凭证    │  GET /imagex/v2/gen_token
+│  获取 STS Token         │
+└───────────┬─────────────┘
+            │
+            ▼
+┌─────────────────────────┐
+│  Step 2: 申请上传地址    │  GET imagex.bytedanceapi.com?Action=ApplyImageUpload
+│  获取 StoreUri, Auth    │
+└───────────┬─────────────┘
+            │
+            ▼
+┌─────────────────────────┐
+│  Step 3: 上传图片文件    │  POST tos-hl-x.snssdk.com/{StoreUri}
+│  上传到 TOS 对象存储     │
+└───────────┬─────────────┘
+            │
+            ▼
+┌─────────────────────────┐
+│  Step 4: 提交上传结果    │  POST imagex.bytedanceapi.com?Action=CommitImageUpload
+│  确认上传完成           │
+└───────────┬─────────────┘
+            │
+            ▼
+┌─────────────────────────┐
+│  Step 5: 获取图片URL    │  GET /imagex/v2/get_img_url
+│  获取最终可用的图片URL   │
+└─────────────────────────┘
+```
+
+---
+
+### Step 1: 获取上传凭证 (STS Token)
+
+**接口**: `GET /imagex/v2/gen_token?aid=2608&uuid={uuid}&client=web`
+
+**请求头**:
+```
+Content-Type: application/json
+Origin: https://juejin.cn
+Referer: https://juejin.cn/
+Cookie: sessionid=xxx; ...（完整认证Cookie）
+```
+
+**响应**:
+```json
+{
+  "err_no": 0,
+  "err_msg": "success",
+  "data": {
+    "token": {
+      "AccessKeyId": "AKTP<your-access-key-id>",
+      "SecretAccessKey": "<your-secret-access-key>",
+      "SessionToken": "STS2<base64-encoded-sts-token>...（Base64编码的STS凭证）",
+      "ExpiredTime": "2025-12-30T18:04:45+08:00",
+      "CurrentTime": "2025-12-30T16:04:45+08:00"
+    }
+  }
+}
+```
+
+**重要字段**:
+| 字段 | 说明 |
+|-----|------|
+| AccessKeyId | AWS4 签名用的 Access Key |
+| SecretAccessKey | AWS4 签名用的 Secret Key |
+| SessionToken | STS 临时安全令牌 |
+| ExpiredTime | Token 过期时间（通常2小时） |
+
+---
+
+### Step 2: 申请上传地址
+
+**接口**: `GET https://imagex.bytedanceapi.com/?Action=ApplyImageUpload&Version=2018-08-01&ServiceId=73owjymdk6`
+
+**请求头**:
+```
+Authorization: AWS4-HMAC-SHA256 Credential={AccessKeyId}/{date}/cn-north-1/imagex/aws4_request, SignedHeaders=x-amz-date;x-amz-security-token, Signature={签名}
+X-Amz-Date: 20251230T080445Z
+X-Amz-Security-Token: {SessionToken}
+Origin: https://juejin.cn
+Referer: https://juejin.cn/
+```
+
+**响应**:
+```json
+{
+  "ResponseMetadata": {
+    "RequestId": "2025123016044755D9417E579430228B72",
+    "Action": "ApplyImageUpload",
+    "Version": "2018-08-01",
+    "Service": "imagex",
+    "Region": "cn-north-1"
+  },
+  "Result": {
+    "UploadAddress": {
+      "StoreInfos": [
+        {
+          "StoreUri": "tos-cn-i-73owjymdk6/5f7fdb8949374fbcaa0a7491a9ae9dcf",
+          "Auth": "SpaceKey/73owjymdk6/1/:version:v2:eyJhbGciOiJI...",
+          "UploadID": "e5968f41d52a4ef59503d732113115dc"
+        }
+      ],
+      "UploadHosts": ["tos-hl-x.snssdk.com"],
+      "SessionKey": "eyJhY2NvdW50VHlwZSI6IkltYWdlWCI..."
+    }
+  }
+}
+```
+
+**重要字段**:
+| 字段 | 说明 |
+|-----|------|
+| StoreUri | 存储路径，格式：`tos-cn-i-73owjymdk6/{文件ID}` |
+| Auth | 上传授权令牌 |
+| UploadHosts | 上传服务器地址列表 |
+| SessionKey | 会话密钥（用于 CommitImageUpload） |
+
+---
+
+### Step 3: 上传图片文件
+
+**接口**: `POST https://tos-hl-x.snssdk.com/{StoreUri}`
+
+**请求头**:
+```
+Authorization: {Auth}  // 来自 Step 2 的 Auth 字段
+Content-Type: application/octet-stream
+Content-CRC32: {CRC32校验值}
+Content-Disposition: attachment; filename="{filename}"
+X-Storage-U: 
+Origin: https://juejin.cn
+Referer: https://juejin.cn/
+```
+
+**请求体**: 图片二进制数据
+
+**响应**:
+```json
+{
+  "Version": "",
+  "success": 0,
+  "error": {
+    "code": 200,
+    "error": "",
+    "error_code": 0,
+    "message": ""
+  },
+  "payload": {
+    "hash": "7af98374",
+    "key": "5f7fdb8949374fbcaa0a7491a9ae9dcf"
+  }
+}
+```
+
+**注意**: `success: 0` 表示成功（这是字节跳动的约定）
+
+---
+
+### Step 4: 提交上传结果
+
+**接口**: `POST https://imagex.bytedanceapi.com/?Action=CommitImageUpload&Version=2018-08-01&SessionKey={SessionKey}&ServiceId=73owjymdk6`
+
+**请求头**:
+```
+Authorization: AWS4-HMAC-SHA256 Credential={AccessKeyId}/{date}/cn-north-1/imagex/aws4_request, SignedHeaders=x-amz-date;x-amz-security-token, Signature={签名}
+X-Amz-Date: {ISO8601时间}
+X-Amz-Security-Token: {SessionToken}
+Content-Length: 0
+Origin: https://juejin.cn
+Referer: https://juejin.cn/
+```
+
+**响应**:
+```json
+{
+  "ResponseMetadata": {
+    "RequestId": "202512301604508743D49DE40143113A40",
+    "Action": "CommitImageUpload",
+    "Version": "2018-08-01",
+    "Service": "imagex",
+    "Region": "cn-north-1"
+  },
+  "Result": {
+    "Results": [
+      {
+        "Uri": "tos-cn-i-73owjymdk6/5f7fdb8949374fbcaa0a7491a9ae9dcf",
+        "UriStatus": 2000
+      }
+    ],
+    "PluginResult": [
+      {
+        "FileName": "5f7fdb8949374fbcaa0a7491a9ae9dcf",
+        "SourceUri": "tos-cn-i-73owjymdk6/5f7fdb8949374fbcaa0a7491a9ae9dcf",
+        "ImageUri": "tos-cn-i-73owjymdk6/5f7fdb8949374fbcaa0a7491a9ae9dcf",
+        "ImageWidth": 2085,
+        "ImageHeight": 1121,
+        "ImageMd5": "0d1807a7608b244a467fa9c77f1049f4",
+        "ImageFormat": "png",
+        "ImageSize": 309406,
+        "FrameCnt": 1
+      }
+    ]
+  }
+}
+```
+
+**重要字段**:
+| 字段 | 说明 |
+|-----|------|
+| UriStatus | 2000 表示成功 |
+| ImageUri | 图片存储 URI |
+| ImageWidth/Height | 图片尺寸 |
+| ImageFormat | 图片格式 |
+| ImageSize | 文件大小（字节） |
+
+---
+
+### Step 5: 获取图片URL
+
+**接口**: `GET /imagex/v2/get_img_url?aid=2608&uuid={uuid}&uri={StoreUri}&img_type=private`
+
+**参数**:
+| 参数 | 说明 |
+|-----|------|
+| uri | 图片存储 URI（需要 URL 编码） |
+| img_type | 图片类型：`private`（私有）或 `public`（公开） |
+
+**请求头**:
+```
+Content-Type: application/json
+Origin: https://juejin.cn
+Referer: https://juejin.cn/
+Cookie: sessionid=xxx; ...
+```
+
+**响应**:
+```json
+{
+  "err_no": 0,
+  "err_msg": "success",
+  "data": {
+    "main_url": "https://p0-xtjj-private.juejin.cn/tos-cn-i-73owjymdk6/5f7fdb8949374fbcaa0a7491a9ae9dcf~tplv-73owjymdk6-jj-mark-v1:0:0:0:0:5o6Y6YeR5oqA5pyv56S-5Yy6IEAgWmVyb1RhYm9v:q75.awebp?policy=eyJ2bSI6MywidWlkIjoiMzkzNjY4ODI1Mzk3MDUzNiJ9&rk3s=e9ecf3d6&x-orig-authkey=xxx&x-orig-expires=1767168291&x-orig-sign=xxx",
+    "backup_url": "https://p0-xtjj-private.juejin.cn/..."
+  }
+}
+```
+
+**最终图片URL格式**:
+- **私有图片**: `https://p0-xtjj-private.juejin.cn/tos-cn-i-73owjymdk6/{fileId}~tplv-73owjymdk6-jj-mark-v1:...:q75.awebp?policy=...&x-orig-authkey=...&x-orig-expires=...&x-orig-sign=...`
+- **公开图片**: `https://p3-juejin.byteimg.com/tos-cn-i-73owjymdk6/{fileId}~tplv-73owjymdk6-image.image`
+
+---
+
+### AWS4 签名算法
+
+ImageX API 使用 AWS Signature Version 4 进行签名认证：
+
+```typescript
+// 签名参数
+const region = "cn-north-1";
+const service = "imagex";
+const algorithm = "AWS4-HMAC-SHA256";
+
+// 签名步骤
+// 1. 创建规范请求 (Canonical Request)
+// 2. 创建待签名字符串 (String to Sign)
+// 3. 计算签名 (Signature)
+// 4. 构建 Authorization 头
+
+// Authorization 头格式:
+// AWS4-HMAC-SHA256 Credential={AccessKeyId}/{date}/{region}/{service}/aws4_request, 
+// SignedHeaders=x-amz-date;x-amz-security-token, 
+// Signature={计算出的签名}
+```
+
+---
+
+### 关键常量
+
+| 常量 | 值 | 说明 |
+|-----|-----|------|
+| ServiceId | `73owjymdk6` | 掘金的 ImageX 服务ID |
+| Region | `cn-north-1` | AWS 区域 |
+| UploadHost | `tos-hl-x.snssdk.com` | TOS 上传服务器 |
+| ImageX API | `imagex.bytedanceapi.com` | ImageX API 地址 |
+
+---
+
+## 11.1 图片上传（简单方式 - 备用）
 
 **接口**: `POST /content_api/v1/upload/article_pic?aid=2608&uuid={uuid}`
 
@@ -518,6 +814,8 @@ function parseSidGuard(sidGuard) {
 }
 ```
 
+> **注意**: 此接口为旧版简单上传方式，可能有文件大小限制。推荐使用 ImageX 方式上传。
+
 ---
 
 ## 发布流程
@@ -530,31 +828,75 @@ function parseSidGuard(sidGuard) {
          │
          ▼
 ┌─────────────────┐
-│  2. 获取分类     │  query_category_list
+│  2. 上传图片     │  ImageX 5步流程
+│  替换文章中的    │  详见"图片上传"章节
+│  本地图片URL    │
+└────────┬────────┘
+         │
+         ▼
+┌─────────────────┐
+│  3. 获取分类     │  query_category_list
 │  选择 category  │
 └────────┬────────┘
          │
          ▼
 ┌─────────────────┐
-│  3. 搜索标签     │  query_tag_list
+│  4. 搜索标签     │  query_tag_list
 │  选择 tag_ids   │
 └────────┬────────┘
          │
          ▼
 ┌─────────────────┐
-│  4. 更新草稿     │  article_draft/update
+│  5. 更新草稿     │  article_draft/update
 │  填写必填信息    │
 │  - category_id  │
 │  - tag_ids      │
 │  - brief_content│
-│  - mark_content │
+│  - mark_content │  （图片URL已替换）
 └────────┬────────┘
          │
          ▼
 ┌─────────────────┐
-│  5. 发布文章     │  article/publish
+│  6. 发布文章     │  article/publish
 │  获取 article_id│
 └─────────────────┘
+```
+
+### 图片处理流程
+
+发布文章时需要处理文章中的图片：
+
+1. **解析 Markdown**: 提取所有 `![alt](url)` 格式的图片
+2. **筛选本地图片**: 过滤出非掘金域名的图片URL
+3. **下载图片**: 将外部图片下载到本地
+4. **上传到掘金**: 使用 ImageX 流程上传每张图片
+5. **替换URL**: 将原图片URL替换为掘金返回的新URL
+6. **更新草稿**: 使用替换后的 Markdown 内容更新草稿
+
+```typescript
+// 示例：替换图片URL
+async function replaceImagesInMarkdown(markdown: string): Promise<string> {
+  const imageRegex = /!\[([^\]]*)\]\(([^)]+)\)/g;
+  let result = markdown;
+  
+  const matches = [...markdown.matchAll(imageRegex)];
+  for (const match of matches) {
+    const [fullMatch, alt, url] = match;
+    
+    // 跳过已经是掘金图片的URL
+    if (url.includes('juejin.cn') || url.includes('byteimg.com')) {
+      continue;
+    }
+    
+    // 上传图片到掘金
+    const newUrl = await uploadImageToJuejin(url);
+    
+    // 替换URL
+    result = result.replace(fullMatch, `![${alt}](${newUrl})`);
+  }
+  
+  return result;
+}
 ```
 
 ---
@@ -609,6 +951,10 @@ function parseSidGuard(sidGuard) {
 8. **审核**: 发布后文章会进入审核状态，审核通过后才能公开显示
 9. **字数限制**: 建议文章正文至少400字以获得更好的推荐
 10. **登录状态检查**: 建议在调用 API 前先检查 `sid_guard` 的过期时间，提前提醒用户续期
+11. **图片上传**: 发布前必须将文章中的外部图片上传到掘金，否则图片可能无法显示
+12. **图片Token有效期**: ImageX 的 STS Token 有效期约 2 小时，上传大量图片时注意刷新
+13. **图片域名**: 掘金图片URL包含签名参数，有过期时间，但发布后会自动转为永久链接
+14. **ServiceId**: 掘金的 ImageX ServiceId 固定为 `73owjymdk6`
 
 ---
 

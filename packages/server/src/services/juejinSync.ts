@@ -3,10 +3,15 @@
  * 负责文章的同步和发布功能
  */
 
+import * as path from "path";
 import { AppDataSource } from "../db";
 import { Article } from "../entities/Article";
 import { User } from "../entities/User";
 import { createJuejinApiClient, type TagInfo } from "./juejinApi";
+import { processArticleImages, hasImagesToUpload } from "./imageUpload";
+
+// 图片上传目录
+const UPLOAD_DIR = path.join(process.cwd(), "data", "uploads");
 
 export interface JuejinSyncResult {
   success: boolean;
@@ -105,6 +110,28 @@ class JuejinSyncService {
     try {
       const client = await this.getApiClient(userId);
 
+      // 处理文章中的图片，上传到掘金 ImageX
+      let contentToSync = article.content;
+      if (hasImagesToUpload(article.content, "juejin")) {
+        console.log("[JuejinSync] 检测到需要上传的图片，开始上传到掘金...");
+        try {
+          const { content: processedContent, results } = await processArticleImages(
+            article.content,
+            client,
+            UPLOAD_DIR,
+            "juejin"
+          );
+          contentToSync = processedContent;
+          
+          const successCount = results.filter(r => r.success).length;
+          console.log(`[JuejinSync] 图片上传完成: ${successCount}/${results.length} 成功`);
+        } catch (imageError) {
+          const errorMsg = imageError instanceof Error ? imageError.message : "未知错误";
+          console.error("[JuejinSync] 图片上传失败:", errorMsg);
+          return { success: false, message: `图片上传失败: ${errorMsg}` };
+        }
+      }
+
       // 创建草稿
       const draft = await client.createDraft(article.title);
       console.log("[JuejinSync] 创建草稿成功:", draft.id);
@@ -113,7 +140,7 @@ class JuejinSyncService {
       await client.updateDraft({
         id: draft.id,
         title: article.title,
-        markContent: article.content,
+        markContent: contentToSync,
         briefContent: article.juejinBriefContent || article.summary || "",
         categoryId: article.juejinCategoryId || "6809637767543259144", // 默认前端
         tagIds: article.juejinTagIds || [],
@@ -181,10 +208,37 @@ class JuejinSyncService {
     try {
       const client = await this.getApiClient(userId);
 
+      // 处理文章中的图片，上传到掘金 ImageX
+      let contentToPublish = article.content;
+      if (hasImagesToUpload(article.content, "juejin")) {
+        console.log("[JuejinSync] 检测到需要上传的图片，开始上传到掘金...");
+        try {
+          const { content: processedContent, results } = await processArticleImages(
+            article.content,
+            client,
+            UPLOAD_DIR,
+            "juejin"
+          );
+          contentToPublish = processedContent;
+          
+          const successCount = results.filter(r => r.success).length;
+          console.log(`[JuejinSync] 图片上传完成: ${successCount}/${results.length} 成功`);
+          
+          // 如果有图片上传失败，给出警告但继续发布
+          if (successCount < results.length) {
+            console.warn(`[JuejinSync] 警告: ${results.length - successCount} 张图片上传失败`);
+          }
+        } catch (imageError) {
+          const errorMsg = imageError instanceof Error ? imageError.message : "未知错误";
+          console.error("[JuejinSync] 图片上传失败:", errorMsg);
+          return { success: false, message: `图片上传失败: ${errorMsg}` };
+        }
+      }
+
       // 一键发布
       const result = await client.publishArticleOneClick({
         title: article.title,
-        markContent: article.content,
+        markContent: contentToPublish,
         briefContent: config.briefContent,
         categoryId: config.categoryId,
         tagIds: config.tagIds,

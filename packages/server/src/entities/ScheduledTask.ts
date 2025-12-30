@@ -40,9 +40,21 @@ export interface TencentPublishConfig {
 }
 
 /**
+ * 掘金发布配置
+ */
+export interface JuejinPublishConfig {
+  categoryId: string;       // 分类ID
+  categoryName?: string;    // 分类名称，用于显示
+  tagIds: string[];         // 标签ID列表
+  tagNames?: string[];      // 标签名称列表，用于显示
+  briefContent: string;     // 文章摘要（50-100字）
+  isOriginal: 0 | 1;        // 0-转载, 1-原创
+}
+
+/**
  * 平台配置类型
  */
-export type PlatformConfig = TencentPublishConfig;
+export type PlatformConfig = TencentPublishConfig | JuejinPublishConfig;
 
 /**
  * 定时发布任务实体

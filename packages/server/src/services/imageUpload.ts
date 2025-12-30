@@ -1,11 +1,31 @@
 /**
  * 图片上传服务
- * 负责将文章中的本地图片上传到腾讯云 COS
+ * 负责将文章中的本地图片上传到各平台（腾讯云 COS、掘金 ImageX 等）
  */
 
 import * as fs from "fs";
 import * as path from "path";
 import { TencentApiClient } from "./tencentApi";
+import { JuejinApiClient } from "./juejinApi";
+
+/**
+ * 图片上传客户端接口
+ * 统一不同平台的图片上传方法
+ */
+export interface ImageUploadClient {
+  /**
+   * 上传图片
+   * @param imageBuffer 图片二进制数据
+   * @param extension 图片扩展名（如 png, jpg）
+   * @returns 图片访问 URL
+   */
+  uploadImage(imageBuffer: Buffer, extension: string): Promise<string>;
+}
+
+/**
+ * 支持的平台类型
+ */
+export type PlatformType = "tencent" | "juejin";
 
 // 调试日志开关
 const DEBUG = true;
@@ -65,6 +85,34 @@ const LOCAL_IMAGE_PATTERN = /!\[([^\]]*)\]\((http:\/\/localhost:\d+\/api\/upload
 const RELATIVE_IMAGE_PATTERN = /!\[([^\]]*)\]\((\/api\/upload\/[^)]+)\)/g;
 // Base64 编码图片模式
 const BASE64_IMAGE_PATTERN = /!\[([^\]]*)\]\((data:image\/([a-zA-Z]+);base64,([^)]+))\)/g;
+// 外部图片 URL 模式（用于检测需要上传的外部图片）
+const EXTERNAL_IMAGE_PATTERN = /!\[([^\]]*)\]\((https?:\/\/[^)]+)\)/g;
+
+/**
+ * 各平台已托管的图片域名
+ * 这些域名的图片不需要重新上传
+ */
+const PLATFORM_IMAGE_DOMAINS: Record<PlatformType, string[]> = {
+  tencent: [
+    "developer.tce.qq.com",
+    "cos.ap-",
+    "myqcloud.com",
+  ],
+  juejin: [
+    "juejin.cn",
+    "byteimg.com",
+    "snssdk.com",
+    "bytedanceapi.com",
+  ],
+};
+
+/**
+ * 检查图片 URL 是否已经托管在目标平台
+ */
+function isImageHostedOnPlatform(url: string, platform: PlatformType): boolean {
+  const domains = PLATFORM_IMAGE_DOMAINS[platform];
+  return domains.some(domain => url.includes(domain));
+}
 
 /**
  * 图片上传结果
@@ -78,12 +126,18 @@ export interface ImageUploadResult {
 
 /**
  * 处理文章内容中的图片
- * 将本地图片上传到腾讯云 COS，并替换 URL
+ * 将本地图片上传到指定平台，并替换 URL
+ * 
+ * @param content 文章内容（Markdown）
+ * @param client 图片上传客户端（支持 TencentApiClient 或 JuejinApiClient）
+ * @param uploadDir 本地上传目录
+ * @param platform 平台类型（可选，用于日志）
  */
 export async function processArticleImages(
   content: string,
-  client: TencentApiClient,
-  uploadDir: string
+  client: ImageUploadClient,
+  uploadDir: string,
+  platform: PlatformType = "tencent"
 ): Promise<{ content: string; results: ImageUploadResult[] }> {
   const results: ImageUploadResult[] = [];
   let processedContent = content;
@@ -130,12 +184,15 @@ export async function processArticleImages(
     });
   }
 
-  if (localImages.length === 0 && base64Images.length === 0) {
-    log("文章中没有本地图片或 base64 图片需要上传");
+  // 收集需要上传的外部图片（非目标平台托管的图片）
+  const externalImages = getExternalImagesToUpload(content, platform);
+
+  if (localImages.length === 0 && base64Images.length === 0 && externalImages.length === 0) {
+    log(`[${platform}] 文章中没有需要上传的图片`);
     return { content, results };
   }
 
-  log(`找到 ${localImages.length} 张本地图片，${base64Images.length} 张 base64 图片需要上传`);
+  log(`[${platform}] 找到 ${localImages.length} 张本地图片，${base64Images.length} 张 base64 图片，${externalImages.length} 张外部图片需要上传`);
 
   // 统一的上传任务结果类型
   interface UploadTaskResult {
@@ -245,9 +302,73 @@ export async function processArticleImages(
     }
   });
 
+  // 构建外部图片上传任务（下载后重新上传到目标平台）
+  const externalImageTasks = externalImages.map((image) => async (): Promise<UploadTaskResult> => {
+    try {
+      log(`处理外部图片: ${image.url}`);
+
+      // 下载外部图片
+      const response = await fetch(image.url);
+      if (!response.ok) {
+        throw new Error(`下载图片失败: ${response.status} ${response.statusText}`);
+      }
+
+      const arrayBuffer = await response.arrayBuffer();
+      const imageBuffer = Buffer.from(arrayBuffer);
+
+      // 从 URL 或 Content-Type 获取扩展名
+      let extension = "png";
+      const contentType = response.headers.get("content-type");
+      if (contentType) {
+        const match = contentType.match(/image\/(\w+)/);
+        if (match) {
+          extension = match[1] === "jpeg" ? "jpg" : match[1];
+        }
+      } else {
+        // 从 URL 提取扩展名
+        const urlPath = new URL(image.url).pathname;
+        const extMatch = urlPath.match(/\.(\w+)$/);
+        if (extMatch) {
+          extension = extMatch[1];
+        }
+      }
+
+      log(`外部图片大小: ${imageBuffer.length} bytes, 扩展名: ${extension}`);
+
+      // 上传到目标平台
+      const newUrl = await client.uploadImage(imageBuffer, extension);
+      log(`外部图片上传成功, 新 URL: ${newUrl.substring(0, 100)}...`);
+
+      // 返回替换信息
+      const newMarkdown = `![${image.alt}](${newUrl})`;
+
+      return {
+        fullMatch: image.fullMatch,
+        result: {
+          originalUrl: image.url,
+          newUrl,
+          success: true,
+        },
+        newMarkdown,
+      };
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : "未知错误";
+      log(`外部图片上传失败: ${image.url}, 错误: ${errorMsg}`);
+      return {
+        fullMatch: image.fullMatch,
+        result: {
+          originalUrl: image.url,
+          newUrl: image.url,
+          success: false,
+          error: errorMsg,
+        },
+      };
+    }
+  });
+
   // 合并所有任务并发执行
-  const allTasks = [...localImageTasks, ...base64ImageTasks];
-  log(`开始并发上传 ${allTasks.length} 张图片，最大并发数: ${MAX_CONCURRENT_UPLOADS}`);
+  const allTasks = [...localImageTasks, ...base64ImageTasks, ...externalImageTasks];
+  log(`[${platform}] 开始并发上传 ${allTasks.length} 张图片，最大并发数: ${MAX_CONCURRENT_UPLOADS}`);
 
   const uploadResults = await runWithConcurrency(allTasks, MAX_CONCURRENT_UPLOADS);
 
@@ -265,7 +386,7 @@ export async function processArticleImages(
   }
 
   const successCount = results.filter((r) => r.success).length;
-  log(`图片处理完成: ${successCount}/${results.length} 成功`);
+  log(`[${platform}] 图片处理完成: ${successCount}/${results.length} 成功`);
 
   return { content: processedContent, results };
 }
@@ -320,6 +441,23 @@ export function hasLocalImages(content: string): boolean {
 }
 
 /**
+ * 检查内容中是否有需要上传到目标平台的图片
+ * 包括：本地图片、base64 图片、其他平台的外部图片
+ * 
+ * @param content Markdown 内容
+ * @param platform 目标平台
+ */
+export function hasImagesToUpload(content: string, platform: PlatformType): boolean {
+  // 检查本地图片和 base64 图片
+  if (hasLocalImages(content)) {
+    return true;
+  }
+  
+  // 检查是否有需要上传的外部图片（非目标平台托管的图片）
+  return hasExternalImagesToUpload(content, platform);
+}
+
+/**
  * 获取内容中的本地图片数量（包括 base64 图片）
  */
 export function countLocalImages(content: string): number {
@@ -341,4 +479,52 @@ export function countLocalImages(content: string): number {
   }
 
   return count;
+}
+
+/**
+ * 检查内容中是否有需要上传到目标平台的外部图片
+ * @param content Markdown 内容
+ * @param platform 目标平台
+ */
+export function hasExternalImagesToUpload(content: string, platform: PlatformType): boolean {
+  const pattern = new RegExp(EXTERNAL_IMAGE_PATTERN.source, "g");
+  let match;
+  
+  while ((match = pattern.exec(content)) !== null) {
+    const url = match[2];
+    // 跳过已经托管在目标平台的图片
+    if (!isImageHostedOnPlatform(url, platform)) {
+      return true;
+    }
+  }
+  
+  return false;
+}
+
+/**
+ * 获取内容中需要上传到目标平台的外部图片列表
+ * @param content Markdown 内容
+ * @param platform 目标平台
+ */
+export function getExternalImagesToUpload(
+  content: string,
+  platform: PlatformType
+): Array<{ fullMatch: string; alt: string; url: string }> {
+  const images: Array<{ fullMatch: string; alt: string; url: string }> = [];
+  const pattern = new RegExp(EXTERNAL_IMAGE_PATTERN.source, "g");
+  let match;
+  
+  while ((match = pattern.exec(content)) !== null) {
+    const url = match[2];
+    // 跳过已经托管在目标平台的图片
+    if (!isImageHostedOnPlatform(url, platform)) {
+      images.push({
+        fullMatch: match[0],
+        alt: match[1],
+        url: url,
+      });
+    }
+  }
+  
+  return images;
 }

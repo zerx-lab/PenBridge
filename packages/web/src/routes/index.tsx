@@ -15,6 +15,7 @@ import {
   XCircle,
   Loader2,
   CloudUpload,
+  Coffee,
 } from "lucide-react";
 import {
   Card,
@@ -245,20 +246,21 @@ function HomePage() {
   const { data: pendingTasks, isLoading: tasksLoading } =
     trpc.schedule.listPending.useQuery();
 
-  // 云端文章状态统计
+  // 腾讯云社区状态（使用上面的 authStatus）
+  const tencentAuthStatus = authStatus;
   const {
     data: tencentStatusCount,
     isLoading: tencentStatusLoading,
   } = trpc.sync.fetchArticleStatusCount.useQuery(undefined, {
-    enabled: authStatus?.isLoggedIn === true,
+    enabled: tencentAuthStatus?.isLoggedIn === true,
     staleTime: 5 * 60 * 1000,
   });
 
-  // 同步状态 mutation
-  const syncStatusMutation = trpc.sync.syncArticleStatus.useMutation({
+  // 腾讯云同步状态 mutation
+  const tencentSyncMutation = trpc.sync.syncArticleStatus.useMutation({
     onSuccess: (result: any) => {
       notification.open({
-        message: result.success ? "同步成功" : "同步失败",
+        message: result.success ? "腾讯云同步成功" : "腾讯云同步失败",
         description: result.message,
         placement: "bottomRight",
         duration: 3,
@@ -267,7 +269,39 @@ function HomePage() {
     },
     onError: (error: any) => {
       notification.open({
-        message: "同步失败",
+        message: "腾讯云同步失败",
+        description: error.message || "同步时发生错误",
+        placement: "bottomRight",
+        duration: 3,
+        type: "error",
+      });
+    },
+  });
+
+  // 掘金社区状态
+  const { data: juejinAuthStatus } = trpc.juejinAuth.status.useQuery();
+  const {
+    data: juejinStatusCount,
+    isLoading: juejinStatusLoading,
+  } = trpc.juejin.fetchArticleStatusCount.useQuery(undefined, {
+    enabled: juejinAuthStatus?.isLoggedIn === true,
+    staleTime: 5 * 60 * 1000,
+  });
+
+  // 掘金同步状态 mutation
+  const juejinSyncMutation = trpc.juejin.syncArticleStatus.useMutation({
+    onSuccess: (result: any) => {
+      notification.open({
+        message: result.success ? "掘金同步成功" : "掘金同步失败",
+        description: result.message,
+        placement: "bottomRight",
+        duration: 3,
+        type: result.success ? "success" : "error",
+      });
+    },
+    onError: (error: any) => {
+      notification.open({
+        message: "掘金同步失败",
         description: error.message || "同步时发生错误",
         placement: "bottomRight",
         duration: 3,
@@ -300,13 +334,17 @@ function HomePage() {
         </Button>
       </div>
 
-      {/* 未登录警告 */}
-      {!authLoading && !authStatus?.isLoggedIn && (
+      {/* 未登录警告 - 当任一平台未登录时显示 */}
+      {!authLoading && (!tencentAuthStatus?.isLoggedIn || !juejinAuthStatus?.isLoggedIn) && (
         <Card className="py-0 gap-0 border-yellow-200 bg-yellow-50 dark:border-yellow-900 dark:bg-yellow-950">
           <CardContent className="flex items-center gap-3 py-2.5 px-4">
             <AlertCircle className="h-4 w-4 text-yellow-600 dark:text-yellow-400 shrink-0" />
             <p className="text-sm text-yellow-800 dark:text-yellow-200 flex-1">
-              未登录发布平台账号，部分功能不可用
+              {!tencentAuthStatus?.isLoggedIn && !juejinAuthStatus?.isLoggedIn
+                ? "未登录发布平台账号，部分功能不可用"
+                : !tencentAuthStatus?.isLoggedIn
+                  ? "腾讯云社区未登录"
+                  : "掘金社区未登录"}
             </p>
             <Link to="/settings">
               <Button size="sm" variant="outline" className="h-7 text-xs">
@@ -378,8 +416,8 @@ function HomePage() {
         )}
       </div>
 
-      {/* 发布平台状态 + 快捷操作 */}
-      <div className="grid gap-3 lg:grid-cols-2">
+      {/* 发布平台状态 */}
+      <div className="grid gap-3 grid-cols-1 md:grid-cols-2 xl:grid-cols-3">
         {/* 腾讯云开发者社区状态 */}
         <Card className="py-0 gap-0">
           <CardHeader className="py-3 px-4 pb-2">
@@ -392,10 +430,10 @@ function HomePage() {
                 variant="ghost"
                 size="sm"
                 className="h-6 text-xs px-2"
-                onClick={() => syncStatusMutation.mutate()}
-                disabled={syncStatusMutation.isLoading || !authStatus?.isLoggedIn}
+                onClick={() => tencentSyncMutation.mutate()}
+                disabled={tencentSyncMutation.isLoading || !tencentAuthStatus?.isLoggedIn}
               >
-                {syncStatusMutation.isLoading ? (
+                {tencentSyncMutation.isLoading ? (
                   <Loader2 className="h-3 w-3 mr-1 animate-spin" />
                 ) : (
                   <RefreshCw className="h-3 w-3 mr-1" />
@@ -405,9 +443,9 @@ function HomePage() {
             </div>
           </CardHeader>
           <CardContent className="px-4 pb-3 pt-0">
-            {!authStatus?.isLoggedIn ? (
+            {!tencentAuthStatus?.isLoggedIn ? (
               <div className="text-center py-2 text-muted-foreground">
-                <p className="text-xs">请先登录发布平台账号</p>
+                <p className="text-xs">请先登录腾讯云账号</p>
               </div>
             ) : tencentStatusLoading ? (
               <div className="grid grid-cols-4 gap-2">
@@ -431,6 +469,69 @@ function HomePage() {
                 </div>
                 <div className="text-center py-2 px-1 rounded-lg bg-orange-50 dark:bg-orange-950/50 border border-orange-100 dark:border-orange-900">
                   <p className="text-lg font-bold text-orange-600 dark:text-orange-400">{tencentStatusCount.draft || 0}</p>
+                  <p className="text-[10px] text-orange-600/70 dark:text-orange-400/70">草稿</p>
+                </div>
+              </div>
+            ) : (
+              <div className="text-center py-2 text-muted-foreground">
+                <AlertTriangle className="h-4 w-4 mx-auto mb-1 opacity-50" />
+                <p className="text-xs">无法获取状态</p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* 掘金社区状态 */}
+        <Card className="py-0 gap-0">
+          <CardHeader className="py-3 px-4 pb-2">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-sm font-medium flex items-center gap-1.5">
+                <Coffee className="h-3.5 w-3.5" />
+                掘金社区
+              </CardTitle>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-6 text-xs px-2"
+                onClick={() => juejinSyncMutation.mutate()}
+                disabled={juejinSyncMutation.isLoading || !juejinAuthStatus?.isLoggedIn}
+              >
+                {juejinSyncMutation.isLoading ? (
+                  <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                ) : (
+                  <RefreshCw className="h-3 w-3 mr-1" />
+                )}
+                同步
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent className="px-4 pb-3 pt-0">
+            {!juejinAuthStatus?.isLoggedIn ? (
+              <div className="text-center py-2 text-muted-foreground">
+                <p className="text-xs">请先登录掘金账号</p>
+              </div>
+            ) : juejinStatusLoading ? (
+              <div className="grid grid-cols-4 gap-2">
+                {[1, 2, 3, 4].map((i) => (
+                  <Skeleton key={i} className="h-11" />
+                ))}
+              </div>
+            ) : juejinStatusCount ? (
+              <div className="grid grid-cols-4 gap-2">
+                <div className="text-center py-2 px-1 rounded-lg bg-green-50 dark:bg-green-950/50 border border-green-100 dark:border-green-900">
+                  <p className="text-lg font-bold text-green-600 dark:text-green-400">{juejinStatusCount.published || 0}</p>
+                  <p className="text-[10px] text-green-600/70 dark:text-green-400/70">已发布</p>
+                </div>
+                <div className="text-center py-2 px-1 rounded-lg bg-blue-50 dark:bg-blue-950/50 border border-blue-100 dark:border-blue-900">
+                  <p className="text-lg font-bold text-blue-600 dark:text-blue-400">{juejinStatusCount.pending || 0}</p>
+                  <p className="text-[10px] text-blue-600/70 dark:text-blue-400/70">审核中</p>
+                </div>
+                <div className="text-center py-2 px-1 rounded-lg bg-red-50 dark:bg-red-950/50 border border-red-100 dark:border-red-900">
+                  <p className="text-lg font-bold text-red-600 dark:text-red-400">{juejinStatusCount.rejected || 0}</p>
+                  <p className="text-[10px] text-red-600/70 dark:text-red-400/70">未通过</p>
+                </div>
+                <div className="text-center py-2 px-1 rounded-lg bg-orange-50 dark:bg-orange-950/50 border border-orange-100 dark:border-orange-900">
+                  <p className="text-lg font-bold text-orange-600 dark:text-orange-400">{juejinStatusCount.draft || 0}</p>
                   <p className="text-[10px] text-orange-600/70 dark:text-orange-400/70">草稿</p>
                 </div>
               </div>
@@ -486,15 +587,22 @@ function HomePage() {
                 variant="outline"
                 size="sm"
                 className="w-full h-11 flex flex-col gap-0.5 p-1 hover:bg-primary/5 hover:border-primary/30 transition-colors"
-                onClick={() => syncStatusMutation.mutate()}
-                disabled={syncStatusMutation.isLoading || !authStatus?.isLoggedIn}
+                onClick={() => {
+                  // 同时触发两个平台的同步
+                  if (tencentAuthStatus?.isLoggedIn) tencentSyncMutation.mutate();
+                  if (juejinAuthStatus?.isLoggedIn) juejinSyncMutation.mutate();
+                }}
+                disabled={
+                  (tencentSyncMutation.isLoading || juejinSyncMutation.isLoading) ||
+                  (!tencentAuthStatus?.isLoggedIn && !juejinAuthStatus?.isLoggedIn)
+                }
               >
-                {syncStatusMutation.isLoading ? (
+                {tencentSyncMutation.isLoading || juejinSyncMutation.isLoading ? (
                   <Loader2 className="h-4 w-4 animate-spin" />
                 ) : (
                   <RefreshCw className="h-4 w-4" />
                 )}
-                <span className="text-[10px]">同步</span>
+                <span className="text-[10px]">全部同步</span>
               </Button>
             </div>
           </CardContent>

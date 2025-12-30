@@ -10,11 +10,13 @@
 import { LessThanOrEqual, In } from "typeorm";
 import { AppDataSource } from "../db";
 import { Article, ArticleStatus } from "../entities/Article";
-import { ScheduledTask, TaskStatus, Platform, TencentPublishConfig } from "../entities/ScheduledTask";
+import { ScheduledTask, TaskStatus, Platform, TencentPublishConfig, JuejinPublishConfig, PlatformConfig } from "../entities/ScheduledTask";
 import { User } from "../entities/User";
 import { articleSyncService } from "./articleSync";
 import { emailService } from "./emailService";
 import { createTencentApiClient } from "./tencentApi";
+import { createJuejinApiClient } from "./juejinApi";
+import { getJuejinCookies } from "./juejinAuth";
 
 /**
  * 调度器配置
@@ -311,6 +313,9 @@ export class SchedulerService {
         case Platform.TENCENT:
           await this.executeTencentPublish(task);
           break;
+        case Platform.JUEJIN:
+          await this.executeJuejinPublish(task);
+          break;
         default:
           throw new Error(`不支持的平台: ${task.platform}`);
       }
@@ -368,11 +373,15 @@ export class SchedulerService {
    */
   private async checkLoginStatus(userId: number, platform: Platform): Promise<boolean> {
     try {
+      const userRepo = AppDataSource.getRepository(User);
+      const user = await userRepo.findOne({ where: { id: userId } });
+      
       if (platform === Platform.TENCENT) {
-        const userRepo = AppDataSource.getRepository(User);
-        const user = await userRepo.findOne({ where: { id: userId } });
         // 只检查本地状态：有 cookies 且标记为已登录
         return !!(user && user.isLoggedIn && user.cookies);
+      } else if (platform === Platform.JUEJIN) {
+        // 检查掘金登录状态
+        return !!(user && user.juejinLoggedIn && user.juejinCookies);
       }
       return false;
     } catch {
@@ -426,6 +435,124 @@ export class SchedulerService {
   }
 
   /**
+   * 执行掘金发布
+   */
+  private async executeJuejinPublish(task: ScheduledTask): Promise<void> {
+    const articleRepo = AppDataSource.getRepository(Article);
+    const taskRepo = AppDataSource.getRepository(ScheduledTask);
+
+    // 获取文章
+    const article = await articleRepo.findOne({
+      where: { id: task.articleId },
+    });
+
+    if (!article) {
+      throw new Error("文章不存在");
+    }
+
+    // 获取掘金 cookies
+    const cookies = await getJuejinCookies();
+    if (!cookies) {
+      throw new Error("掘金登录已失效，请重新登录");
+    }
+
+    // 应用定时任务中保存的配置
+    const config = task.config as JuejinPublishConfig;
+    article.juejinCategoryId = config.categoryId;
+    article.juejinTagIds = config.tagIds;
+    article.juejinTagNames = config.tagNames;
+    article.juejinBriefContent = config.briefContent;
+    article.juejinIsOriginal = config.isOriginal;
+    await articleRepo.save(article);
+
+    // 验证配置
+    if (!article.juejinCategoryId) {
+      throw new Error("请先选择文章分类");
+    }
+    if (!article.juejinTagIds || article.juejinTagIds.length === 0) {
+      throw new Error("请至少选择一个标签");
+    }
+    if (article.juejinTagIds.length > 3) {
+      throw new Error("最多选择3个标签");
+    }
+    if (!article.juejinBriefContent) {
+      throw new Error("请填写文章摘要");
+    }
+    if (article.juejinBriefContent.length < 50) {
+      throw new Error("摘要至少需要50个字符");
+    }
+    if (article.juejinBriefContent.length > 100) {
+      throw new Error("摘要不能超过100个字符");
+    }
+    if (!article.content || article.content.length < 100) {
+      throw new Error("文章正文建议至少100字");
+    }
+
+    try {
+      const client = createJuejinApiClient(cookies);
+
+      console.log("[Scheduler] 开始执行掘金定时发布:", {
+        articleId: article.id,
+        title: article.title,
+        categoryId: article.juejinCategoryId,
+        tagIds: article.juejinTagIds,
+        existingDraftId: article.juejinDraftId || "无",
+      });
+
+      // 一键发布文章（复用已有草稿ID）
+      const result = await client.publishArticleOneClick({
+        title: article.title,
+        markContent: article.content,
+        briefContent: article.juejinBriefContent,
+        categoryId: article.juejinCategoryId,
+        tagIds: article.juejinTagIds,
+        isOriginal: article.juejinIsOriginal,
+        existingDraftId: article.juejinDraftId || undefined,
+      });
+
+      // 更新文章状态
+      article.juejinArticleId = result.article_id;
+      article.juejinDraftId = result.draft_id;
+      article.juejinArticleUrl = `https://juejin.cn/post/${result.article_id}`;
+      article.juejinStatus = "pending"; // 掘金发布后需要审核，初始状态为审核中
+      article.juejinLastSyncedAt = new Date();
+      await articleRepo.save(article);
+
+      console.log("[Scheduler] 掘金发布成功:", {
+        articleId: result.article_id,
+        draftId: result.draft_id,
+        url: article.juejinArticleUrl,
+      });
+
+      // 更新任务结果
+      task.resultUrl = article.juejinArticleUrl;
+      await taskRepo.save(task);
+    } catch (error) {
+      // 详细记录错误日志
+      console.error("[Scheduler] 掘金发布失败，详细信息:", {
+        articleId: article.id,
+        title: article.title,
+        categoryId: article.juejinCategoryId,
+        tagIds: article.juejinTagIds,
+        briefContent: article.juejinBriefContent,
+        contentLength: article.content?.length,
+        error: error instanceof Error ? {
+          name: error.name,
+          message: error.message,
+          stack: error.stack,
+        } : error,
+      });
+
+      // 更新错误状态
+      article.juejinStatus = "failed";
+      article.errorMessage = error instanceof Error ? error.message : "发布失败";
+      await articleRepo.save(article);
+
+      throw error;
+    }
+  }
+
+  /**
    * 创建定时任务
    */
   async createTask(params: {
@@ -433,7 +560,7 @@ export class SchedulerService {
     userId: number;
     platform: Platform;
     scheduledAt: Date;
-    config: TencentPublishConfig;
+    config: PlatformConfig;
   }): Promise<ScheduledTask> {
     const taskRepo = AppDataSource.getRepository(ScheduledTask);
     const articleRepo = AppDataSource.getRepository(Article);
@@ -548,16 +675,22 @@ export class SchedulerService {
 
   /**
    * 获取文章的定时任务
+   * @param articleId 文章ID
+   * @param platform 可选，指定平台。如果不指定则返回任意平台的任务
    */
-  async getArticleTask(articleId: number): Promise<ScheduledTask | null> {
+  async getArticleTask(articleId: number, platform?: Platform): Promise<ScheduledTask | null> {
     const taskRepo = AppDataSource.getRepository(ScheduledTask);
 
-    return taskRepo.findOne({
-      where: {
-        articleId,
-        status: In([TaskStatus.PENDING, TaskStatus.RUNNING]),
-      },
-    });
+    const where: any = {
+      articleId,
+      status: In([TaskStatus.PENDING, TaskStatus.RUNNING]),
+    };
+
+    if (platform) {
+      where.platform = platform;
+    }
+
+    return taskRepo.findOne({ where });
   }
 
   /**
@@ -568,7 +701,7 @@ export class SchedulerService {
     userId: number,
     updates: {
       scheduledAt?: Date;
-      config?: TencentPublishConfig;
+      config?: PlatformConfig;
     }
   ): Promise<ScheduledTask> {
     const taskRepo = AppDataSource.getRepository(ScheduledTask);
