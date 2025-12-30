@@ -371,7 +371,7 @@ function TencentAuthSettings() {
                         placeholder="粘贴 Cookie..."
                         value={cookieInput}
                         onChange={(e) => setCookieInput(e.target.value)}
-                        rows={4}
+                        className="resize-none h-24 [field-sizing:fixed] overflow-x-hidden break-all"
                       />
                     </div>
                   </div>

@@ -108,7 +108,13 @@ function RecentArticleItem({
   const handleExternalLinkClick = (e: React.MouseEvent) => {
     e.stopPropagation();
     if (article.tencentArticleUrl) {
-      window.open(article.tencentArticleUrl, "_blank", "noopener,noreferrer");
+      // 优先使用 Electron API 在系统默认浏览器中打开
+      if (window.electronAPI?.shell?.openExternal) {
+        window.electronAPI.shell.openExternal(article.tencentArticleUrl);
+      } else {
+        // 回退到 window.open（Web 环境）
+        window.open(article.tencentArticleUrl, "_blank", "noopener,noreferrer");
+      }
     }
   };
 
@@ -458,18 +464,24 @@ function HomePage() {
                 )}
                 <span className="text-[10px]">写文章</span>
               </Button>
-              <Link to="/articles" className="block">
-                <Button variant="outline" size="sm" className="w-full h-11 flex flex-col gap-0.5 p-1 hover:bg-primary/5 hover:border-primary/30 transition-colors">
-                  <FileText className="h-4 w-4" />
-                  <span className="text-[10px]">文章</span>
-                </Button>
-              </Link>
-              <Link to="/settings" className="block">
-                <Button variant="outline" size="sm" className="w-full h-11 flex flex-col gap-0.5 p-1 hover:bg-primary/5 hover:border-primary/30 transition-colors">
-                  <Send className="h-4 w-4" />
-                  <span className="text-[10px]">设置</span>
-                </Button>
-              </Link>
+              <Button
+                variant="outline"
+                size="sm"
+                className="w-full h-11 flex flex-col gap-0.5 p-1 hover:bg-primary/5 hover:border-primary/30 transition-colors"
+                onClick={() => navigate({ to: "/articles" })}
+              >
+                <FileText className="h-4 w-4" />
+                <span className="text-[10px]">文章</span>
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="w-full h-11 flex flex-col gap-0.5 p-1 hover:bg-primary/5 hover:border-primary/30 transition-colors"
+                onClick={() => navigate({ to: "/settings" })}
+              >
+                <Send className="h-4 w-4" />
+                <span className="text-[10px]">设置</span>
+              </Button>
               <Button
                 variant="outline"
                 size="sm"
@@ -542,7 +554,7 @@ function HomePage() {
           <CardHeader className="py-3 px-4 pb-2">
             <div className="flex items-center justify-between">
               <CardTitle className="text-sm font-medium">定时发布</CardTitle>
-              <Link to="/settings">
+<Link to="/settings" search={{ tab: "schedule" }}>
                 <Button variant="ghost" size="sm" className="h-6 text-xs px-2">
                   管理
                   <ArrowRight className="h-3 w-3 ml-0.5" />

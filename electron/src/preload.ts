@@ -52,6 +52,12 @@ contextBridge.exposeInMainWorld("electronAPI", {
 
   // 平台信息
   platform: process.platform,
+
+  // Shell 相关
+  shell: {
+    // 在系统默认浏览器中打开外部链接
+    openExternal: (url: string) => ipcRenderer.invoke("shell:openExternal", url),
+  },
 });
 
 // TypeScript 类型定义
@@ -86,6 +92,9 @@ declare global {
         testConnection: (baseUrl: string) => Promise<{ success: boolean; message?: string }>;
       };
       platform: string;
+      shell: {
+        openExternal: (url: string) => Promise<{ success: boolean; message?: string }>;
+      };
     };
   }
 }

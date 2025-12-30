@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, session, Menu, globalShortcut } from "electron";
+import { app, BrowserWindow, ipcMain, session, Menu, globalShortcut, shell } from "electron";
 import * as path from "path";
 import { TencentAuth } from "./auth/tencentAuth";
 import { createStore } from "./store";
@@ -195,6 +195,22 @@ function registerServerConfigHandlers() {
   });
 }
 
+// 注册通用工具 IPC 处理器
+function registerUtilityHandlers() {
+  // 在系统默认浏览器中打开外部链接
+  ipcMain.handle("shell:openExternal", async (_event, url: string) => {
+    try {
+      await shell.openExternal(url);
+      return { success: true };
+    } catch (error) {
+      return {
+        success: false,
+        message: error instanceof Error ? error.message : "打开链接失败",
+      };
+    }
+  });
+}
+
 // 注册 IPC 处理器
 function registerIpcHandlers() {
   // 获取登录状态
@@ -263,6 +279,7 @@ app.whenReady().then(() => {
 
   registerWindowHandlers();
   registerServerConfigHandlers();
+  registerUtilityHandlers();
   registerIpcHandlers();
   createMainWindow();
   setupWindowEvents();

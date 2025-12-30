@@ -35,10 +35,15 @@ export interface ElectronServerConfigAPI {
   testConnection: (baseUrl: string) => Promise<{ success: boolean; message?: string }>;
 }
 
+export interface ElectronShellAPI {
+  openExternal: (url: string) => Promise<{ success: boolean; message?: string }>;
+}
+
 export interface ElectronAPI {
   window: ElectronWindowAPI;
   auth: ElectronAuthAPI;
   serverConfig: ElectronServerConfigAPI;
+  shell: ElectronShellAPI;
   platform: string;
 }
 

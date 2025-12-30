@@ -97,7 +97,13 @@ export function PublishMenu({
 
   const handleViewArticle = () => {
     if (tencentArticleUrl) {
-      window.open(tencentArticleUrl, "_blank");
+      // 优先使用 Electron API 在系统默认浏览器中打开
+      if (window.electronAPI?.shell?.openExternal) {
+        window.electronAPI.shell.openExternal(tencentArticleUrl);
+      } else {
+        // 回退到 window.open（Web 环境）
+        window.open(tencentArticleUrl, "_blank");
+      }
     }
   };
 

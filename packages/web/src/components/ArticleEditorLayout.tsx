@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   Tooltip,
   TooltipContent,
@@ -27,6 +28,57 @@ import {
 } from "@/components/ui/sheet";
 import MilkdownEditor from "@/components/MilkdownEditor";
 import { countWords, formatWordCountDetail } from "@/utils/wordCount";
+
+// 编辑器骨架屏组件 - Notion 风格
+function EditorSkeleton() {
+  return (
+    <div className="space-y-4 animate-in fade-in-50 duration-300">
+      {/* 模拟段落块 */}
+      <div className="space-y-2">
+        <Skeleton className="h-4 w-full" />
+        <Skeleton className="h-4 w-[95%]" />
+        <Skeleton className="h-4 w-[88%]" />
+      </div>
+      
+      {/* 空行 */}
+      <div className="h-2" />
+      
+      {/* 模拟第二段 */}
+      <div className="space-y-2">
+        <Skeleton className="h-4 w-[92%]" />
+        <Skeleton className="h-4 w-full" />
+        <Skeleton className="h-4 w-[75%]" />
+      </div>
+      
+      {/* 空行 */}
+      <div className="h-2" />
+      
+      {/* 模拟代码块或引用 */}
+      <div className="pl-4 border-l-2 border-muted space-y-2">
+        <Skeleton className="h-4 w-[85%]" />
+        <Skeleton className="h-4 w-[70%]" />
+      </div>
+      
+      {/* 空行 */}
+      <div className="h-2" />
+      
+      {/* 模拟第三段 */}
+      <div className="space-y-2">
+        <Skeleton className="h-4 w-[90%]" />
+        <Skeleton className="h-4 w-[82%]" />
+        <Skeleton className="h-4 w-[60%]" />
+      </div>
+      
+      {/* 加载提示 */}
+      <div className="flex items-center gap-2 pt-4 text-sm text-muted-foreground">
+        <div className="h-1 w-1 rounded-full bg-muted-foreground/50 animate-pulse" />
+        <div className="h-1 w-1 rounded-full bg-muted-foreground/50 animate-pulse [animation-delay:150ms]" />
+        <div className="h-1 w-1 rounded-full bg-muted-foreground/50 animate-pulse [animation-delay:300ms]" />
+        <span className="ml-1">正在加载内容...</span>
+      </div>
+    </div>
+  );
+}
 
 // 编辑器宽度设置
 const WIDTH_STORAGE_KEY = "editor-fullwidth-preference";
@@ -46,6 +98,9 @@ export interface ArticleEditorLayoutProps {
   // 状态相关
   isPublished?: boolean;
   statusIndicator?: ReactNode;
+  
+  // 内容加载状态（用于显示骨架屏）
+  isContentLoading?: boolean;
   
   // 操作按钮区域（保存、发布等）
   actionButtons: ReactNode;
@@ -71,6 +126,7 @@ export function ArticleEditorLayout({
   breadcrumbLabel,
   isPublished = false,
   statusIndicator,
+  isContentLoading = false,
   actionButtons,
   settingsContent,
   titleInputRef: externalTitleInputRef,
@@ -225,15 +281,19 @@ export function ArticleEditorLayout({
           />
           <div className="h-px bg-border/40 mt-3 mb-4" />
 
-          {/* Markdown 编辑器 */}
-          <MilkdownEditor
-            key={editorKey}
-            value={content}
-            onChange={onContentChange}
-            placeholder="开始写作..."
-            className="min-h-[calc(100vh-200px)]"
-            articleId={articleId}
-          />
+          {/* Markdown 编辑器 / 骨架屏 */}
+          {isContentLoading ? (
+            <EditorSkeleton />
+          ) : (
+            <MilkdownEditor
+              key={editorKey}
+              value={content}
+              onChange={onContentChange}
+              placeholder="开始写作..."
+              className="min-h-[calc(100vh-200px)]"
+              articleId={articleId}
+            />
+          )}
         </div>
 
         {/* 字数统计 - 右下角固定 */}

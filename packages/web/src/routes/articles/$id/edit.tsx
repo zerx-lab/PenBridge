@@ -45,7 +45,7 @@ function EditArticlePage() {
   });
 
   // 第二步：延迟加载文章内容（大字段，可能较慢）
-  const { data: articleContent } = trpc.article.getContent.useQuery(
+  const { data: articleContent, isLoading: isContentLoading } = trpc.article.getContent.useQuery(
     { id: Number(id) },
     { enabled: !!articleMeta } // 元数据加载完成后再加载内容
   );
@@ -264,6 +264,7 @@ function EditArticlePage() {
       onContentChange={handleContentChange}
       breadcrumbLabel={title || "无标题"}
       isPublished={isPublished}
+      isContentLoading={isContentLoading}
       titleInputRef={titleInputRef}
       editorKey={editorKey}
       articleId={Number(id)}
