@@ -179,8 +179,6 @@ jobs:
           tags: ${{ steps.docker-tags.outputs.tags }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
-          build-args: |
-            VERSION=${{ needs.prepare.outputs.version }}
 
   # macOS 构建
   build-macos:
