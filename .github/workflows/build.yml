@@ -404,7 +404,7 @@ jobs:
             notes += `---\n\n`;
             notes += `## 📦 Docker Image\n\n`;
             notes += `\`\`\`bash\n`;
-            notes += `docker pull ghcr.io/${{ github.repository }}:${{ needs.prepare.outputs.version }}\n`;
+            notes += `docker pull ghcr.io/${{ github.repository }}:${{ needs.prepare.outputs.version }}\n`.toLowerCase();
             notes += `\`\`\`\n\n`;
             notes += `## 📥 Downloads\n\n`;
             notes += `| Platform | File |\n`;
