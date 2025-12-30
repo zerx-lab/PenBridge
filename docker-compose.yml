@@ -12,7 +12,7 @@ services:
     build:
       context: .
       dockerfile: packages/server/Dockerfile
-    image: tencent-dev-blog-server:latest
+    image: tencent-dev-blog-server:v1
     container_name: tencent-dev-blog-server
     ports:
       - "3000:3000"
@@ -24,7 +24,15 @@ services:
       - PORT=3000
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/"]
+      test:
+        [
+          "CMD",
+          "wget",
+          "--no-verbose",
+          "--tries=1",
+          "--spider",
+          "http://localhost:3000/",
+        ]
       interval: 30s
       timeout: 10s
       retries: 3
