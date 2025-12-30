@@ -26,6 +26,8 @@ const config: ForgeConfig = {
     new MakerSquirrel({
       name: "penbridge",
       setupIcon: "./assets/icon.ico",
+      authors: "PenBridge Team",
+      description: "PenBridge - 文章管理与发布工具",
     }),
     // 通用 ZIP 包（所有平台）
     new MakerZIP({}, ["darwin", "win32", "linux"]),

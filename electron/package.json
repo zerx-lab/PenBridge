@@ -1,6 +1,8 @@
 {
   "name": "tencent-dev-blog-electron",
   "version": "1.0.0",
+  "description": "PenBridge - 文章管理与发布工具",
+  "author": "PenBridge Team",
   "main": "dist/main.js",
   "files": [
     "dist",
