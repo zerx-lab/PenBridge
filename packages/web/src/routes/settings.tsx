@@ -118,7 +118,7 @@ const isElectron = () => {
   return typeof window !== "undefined" && window.electronAPI !== undefined;
 };
 
-// 腾讯云授权组件
+// 腾讯云开发者社区授权组件（发布渠道之一）
 function TencentAuthSettings() {
   const { data: authStatus, isLoading: statusLoading } = trpc.auth.status.useQuery();
   const utils = trpc.useContext();
@@ -227,9 +227,9 @@ function TencentAuthSettings() {
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-lg font-semibold">腾讯云授权</h2>
+        <h2 className="text-lg font-semibold">腾讯云开发者社区</h2>
         <p className="text-sm text-muted-foreground">
-          登录腾讯云开发者社区以使用文章发布功能
+          登录腾讯云开发者社区以发布文章到该平台
         </p>
       </div>
 
@@ -264,7 +264,7 @@ function TencentAuthSettings() {
                     </Badge>
                   </div>
                   <p className="text-sm text-muted-foreground">
-                    腾讯云开发者社区账号
+                    已绑定腾讯云开发者社区
                   </p>
                 </div>
               </div>
@@ -297,7 +297,7 @@ function TencentAuthSettings() {
                   </Badge>
                 </div>
                 <p className="text-sm text-muted-foreground">
-                  请登录腾讯云开发者社区账号以使用发布功能
+                  请登录以发布文章到腾讯云开发者社区
                 </p>
               </div>
             </div>
@@ -324,7 +324,7 @@ function TencentAuthSettings() {
           <CardHeader>
             <CardTitle className="text-base">登录方式</CardTitle>
             <CardDescription>
-              选择一种方式登录腾讯云开发者社区
+              选择一种方式登录
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
@@ -349,14 +349,14 @@ function TencentAuthSettings() {
                   <DialogHeader>
                     <DialogTitle>手动输入 Cookie</DialogTitle>
                     <DialogDescription>
-                      从浏览器获取腾讯云的 Cookie 并粘贴到下方
+                      从浏览器获取 Cookie 并粘贴到下方
                     </DialogDescription>
                   </DialogHeader>
                   <div className="space-y-4">
                     <div className="text-sm text-muted-foreground space-y-2">
                       <p className="font-medium">如何获取 Cookie：</p>
                       <ol className="list-decimal list-inside space-y-1 text-xs">
-                        <li>打开浏览器访问腾讯云开发者社区</li>
+                        <li>打开浏览器访问 cloud.tencent.com/developer</li>
                         <li>完成登录</li>
                         <li>按 F12 打开开发者工具</li>
                         <li>切换到 Application 标签</li>
@@ -402,7 +402,7 @@ function TencentAuthSettings() {
 
             <p className="text-xs text-muted-foreground text-center">
               {isElectron()
-                ? "登录窗口会打开腾讯云页面，您可以使用微信扫码等方式登录"
+                ? "登录窗口会打开登录页面，您可以使用微信扫码等方式登录"
                 : "推荐使用 Electron 客户端获得更好的登录体验"}
             </p>
           </CardContent>
@@ -1703,8 +1703,8 @@ function AboutSettings() {
             <h4 className="font-medium mb-2">功能</h4>
             <ul className="text-sm text-muted-foreground space-y-1">
               <li>• 文章编辑与管理</li>
-              <li>• 腾讯云开发者社区授权登录</li>
-              <li>• 同步草稿到腾讯云</li>
+              <li>• 多平台授权登录</li>
+              <li>• 同步草稿到云端</li>
               <li>• 一键发布文章</li>
               <li>• 定时发布功能</li>
               <li>• 邮件通知功能</li>

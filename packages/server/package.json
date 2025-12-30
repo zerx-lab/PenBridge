@@ -1,5 +1,5 @@
 {
-  "name": "@tencent-dev-blog/server",
+  "name": "@pen-bridge/server",
   "version": "1.0.0",
   "scripts": {
     "dev": "bun --watch src/index.ts",

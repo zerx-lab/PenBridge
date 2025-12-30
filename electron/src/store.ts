@@ -17,7 +17,7 @@ interface StoreSchema {
 
 export function createStore() {
   const store = new Store<StoreSchema>({
-    name: "tencent-dev-blog",
+    name: "pen-bridge",
     defaults: {
       cookies: [],
       userInfo: {

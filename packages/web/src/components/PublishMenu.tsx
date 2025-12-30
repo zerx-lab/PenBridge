@@ -46,7 +46,7 @@ interface PublishMenuProps {
 
 /**
  * 发布菜单组件
- * 支持多平台发布，当前仅实现腾讯云社区
+ * 支持多平台发布，当前已实现腾讯云开发者社区
  */
 export function PublishMenu({
   articleId,
@@ -76,7 +76,7 @@ export function PublishMenu({
     onSuccess: (result: any) => {
       message.destroy("sync-draft");
       if (result.success) {
-        message.success(result.message || "草稿已同步到腾讯云");
+        message.success(result.message || "草稿已同步到云端");
         trpcUtils.article.list.invalidate();
         trpcUtils.article.get.invalidate({ id: articleId });
         onSuccess?.();
@@ -101,7 +101,7 @@ export function PublishMenu({
     }
   };
 
-  // 判断是否已发布到腾讯云
+  // 判断文章状态
   const isPublished = articleStatus === "published";
   const isPending = articleStatus === "pending";
   const isScheduled = articleStatus === "scheduled";
@@ -149,12 +149,12 @@ export function PublishMenu({
           <DropdownMenuTrigger asChild>{TriggerButton}</DropdownMenuTrigger>
         )}
         <DropdownMenuContent align="end" className="w-48">
-          {/* 腾讯云社区 */}
+          {/* 腾讯云开发者社区 */}
           <DropdownMenuSub>
             <DropdownMenuSubTrigger>
               <span className="flex items-center gap-2">
                 <Cloud className="h-4 w-4" />
-                腾讯云社区
+                腾讯云开发者社区
               </span>
             </DropdownMenuSubTrigger>
             <DropdownMenuSubContent className="w-40">
@@ -223,7 +223,7 @@ export function PublishMenu({
         </DropdownMenuContent>
       </DropdownMenu>
 
-      {/* 腾讯云发布配置弹窗 */}
+      {/* 腾讯云开发者社区发布配置弹窗 */}
       <TencentPublishDialog
         open={publishDialogOpen}
         onOpenChange={setPublishDialogOpen}

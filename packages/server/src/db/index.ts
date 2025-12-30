@@ -11,7 +11,7 @@ import initSqlJs from "sql.js";
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from "fs";
 import { dirname } from "path";
 
-const DB_PATH = "data/tencent-dev-blog.db";
+const DB_PATH = "data/pen-bridge.db";
 
 // 确保数据目录存在
 const dataDir = dirname(DB_PATH);

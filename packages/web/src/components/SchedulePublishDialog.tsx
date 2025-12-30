@@ -202,7 +202,7 @@ export function SchedulePublishDialog({
       <DialogContent className="sm:max-w-[480px]" ref={containerRef}>
         <DialogHeader>
           <DialogTitle>
-            {existingTask ? "编辑定时发布" : "定时发布到腾讯云社区"}
+            {existingTask ? "编辑定时发布" : "定时发布到腾讯云开发者社区"}
           </DialogTitle>
           <DialogDescription>
             设置发布时间和配置，系统将在指定时间自动发布文章
@@ -235,14 +235,14 @@ export function SchedulePublishDialog({
               />
             </div>
             <p className="text-xs text-muted-foreground">
-              系统将在设定时间自动发布文章到腾讯云社区
+              系统将在设定时间自动发布文章
             </p>
           </div>
 
           {/* 标签选择 */}
           <div className="space-y-2">
             <Label>
-              腾讯云标签 <span className="text-destructive">*</span>
+              文章标签 <span className="text-destructive">*</span>
             </Label>
             <TencentTagSelect
               value={tagIds}

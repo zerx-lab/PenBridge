@@ -1,4 +1,4 @@
-# 腾讯云开发者社区文章管理工具 - Docker Compose 配置
+# PenBridge 多平台文章管理与发布工具 - Docker Compose 配置
 # 用于本地开发和测试
 #
 # 使用方法：
@@ -48,7 +48,7 @@ volumes:
 #     build:
 #       context: .
 #       dockerfile: packages/web/Dockerfile
-#     container_name: tencent-dev-blog-web
+#     container_name: pen-bridge-web
 #     ports:
 #       - "80:80"
 #     depends_on:

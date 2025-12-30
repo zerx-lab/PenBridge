@@ -1,5 +1,5 @@
 {
-  "name": "tencent-dev-blog",
+  "name": "pen-bridge",
   "private": true,
   "workspaces": [
     "packages/*"

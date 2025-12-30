@@ -99,7 +99,7 @@ export class EmailService {
                 ${params.articleUrl ? `<p style="margin: 0;"><strong>文章链接：</strong><a href="${params.articleUrl}" style="color: #1890ff;">${params.articleUrl}</a></p>` : ""}
               </div>
               <p style="color: #666; font-size: 12px; margin-top: 20px;">
-                此邮件由腾讯云开发者社区文章管理工具自动发送
+                此邮件由 PenBridge 多平台文章管理工具自动发送
               </p>
             </div>
           `,
@@ -124,7 +124,7 @@ export class EmailService {
                 请检查文章内容和发布配置，或重新登录平台后再试。
               </p>
               <p style="color: #666; font-size: 12px; margin-top: 20px;">
-                此邮件由腾讯云开发者社区文章管理工具自动发送
+                此邮件由 PenBridge 多平台文章管理工具自动发送
               </p>
             </div>
           `,
@@ -148,7 +148,7 @@ export class EmailService {
                 <strong>请尽快重新登录平台</strong>，否则定时发布任务将无法执行。
               </p>
               <p style="color: #666; font-size: 12px; margin-top: 20px;">
-                此邮件由腾讯云开发者社区文章管理工具自动发送
+                此邮件由 PenBridge 多平台文章管理工具自动发送
               </p>
             </div>
           `,
@@ -171,7 +171,7 @@ export class EmailService {
                 当定时发布任务执行完成或出现异常时，您将收到邮件通知。
               </p>
               <p style="color: #666; font-size: 12px; margin-top: 20px;">
-                此邮件由腾讯云开发者社区文章管理工具自动发送
+                此邮件由 PenBridge 多平台文章管理工具自动发送
               </p>
             </div>
           `,

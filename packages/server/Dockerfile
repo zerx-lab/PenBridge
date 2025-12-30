@@ -1,4 +1,4 @@
-# 腾讯云开发者社区文章管理工具 - 后端服务 Docker 镜像
+# PenBridge 多平台文章管理与发布工具 - 后端服务 Docker 镜像
 # 基于 Bun 运行时
 #
 # 构建命令（在 packages/server 目录执行）：

@@ -26,7 +26,7 @@ interface TencentPublishDialogProps {
 }
 
 /**
- * 腾讯云社区发布配置弹窗
+ * 腾讯云开发者社区发布配置弹窗
  */
 export function TencentPublishDialog({
   open,
@@ -143,9 +143,9 @@ export function TencentPublishDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[480px]" ref={containerRef}>
         <DialogHeader>
-          <DialogTitle>发布到腾讯云社区</DialogTitle>
+          <DialogTitle>发布到腾讯云开发者社区</DialogTitle>
           <DialogDescription>
-            配置发布选项，文章将提交至腾讯云开发者社区审核
+            配置发布选项，文章将提交至平台审核
           </DialogDescription>
         </DialogHeader>
 
@@ -153,7 +153,7 @@ export function TencentPublishDialog({
           {/* 标签选择 */}
           <div className="space-y-2">
             <Label>
-              腾讯云标签 <span className="text-destructive">*</span>
+              文章标签 <span className="text-destructive">*</span>
             </Label>
             <TencentTagSelect 
               value={tagIds} 

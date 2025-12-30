@@ -239,7 +239,7 @@ function HomePage() {
   const { data: pendingTasks, isLoading: tasksLoading } =
     trpc.schedule.listPending.useQuery();
 
-  // 腾讯云文章状态统计
+  // 云端文章状态统计
   const {
     data: tencentStatusCount,
     isLoading: tencentStatusLoading,
@@ -278,7 +278,7 @@ function HomePage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-xl font-bold tracking-tight">仪表盘</h1>
-          <p className="text-sm text-muted-foreground">腾讯云开发者社区文章管理</p>
+          <p className="text-sm text-muted-foreground">多平台文章管理与发布</p>
         </div>
         <Button
           size="sm"
@@ -300,7 +300,7 @@ function HomePage() {
           <CardContent className="flex items-center gap-3 py-2.5 px-4">
             <AlertCircle className="h-4 w-4 text-yellow-600 dark:text-yellow-400 shrink-0" />
             <p className="text-sm text-yellow-800 dark:text-yellow-200 flex-1">
-              未登录腾讯云账号，部分功能不可用
+              未登录发布平台账号，部分功能不可用
             </p>
             <Link to="/settings">
               <Button size="sm" variant="outline" className="h-7 text-xs">
@@ -372,9 +372,9 @@ function HomePage() {
         )}
       </div>
 
-      {/* 腾讯云状态 + 快捷操作 */}
+      {/* 发布平台状态 + 快捷操作 */}
       <div className="grid gap-3 lg:grid-cols-2">
-        {/* 腾讯云文章状态 */}
+        {/* 腾讯云开发者社区状态 */}
         <Card className="py-0 gap-0">
           <CardHeader className="py-3 px-4 pb-2">
             <div className="flex items-center justify-between">
@@ -401,7 +401,7 @@ function HomePage() {
           <CardContent className="px-4 pb-3 pt-0">
             {!authStatus?.isLoggedIn ? (
               <div className="text-center py-2 text-muted-foreground">
-                <p className="text-xs">请先登录腾讯云账号</p>
+                <p className="text-xs">请先登录发布平台账号</p>
               </div>
             ) : tencentStatusLoading ? (
               <div className="grid grid-cols-4 gap-2">

@@ -1,5 +1,5 @@
 {
-  "name": "@tencent-dev-blog/web",
+  "name": "@pen-bridge/web",
   "version": "1.0.0",
   "type": "module",
   "scripts": {

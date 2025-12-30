@@ -1,13 +1,14 @@
-# AGENTS.md - 腾讯云开发者社区文章管理工具
+# AGENTS.md - PenBridge 多平台文章管理与发布工具
 
 本文档为 AI 编程助手提供项目指南，帮助理解项目结构和开发规范。
 
 ## 项目概述
 
-这是一个腾讯云开发者社区文章管理工具，支持：
-- 自动登录腾讯云开发者社区（首次手动登录，之后自动保存登录状态）
+PenBridge 是一个多平台文章管理与发布工具，支持：
 - 文章编辑与管理
-- 定时发布功能（开发中）
+- 多平台发布（目前支持腾讯云开发者社区，后续会增加更多渠道）
+- 自动登录各平台（首次手动登录，之后自动保存登录状态）
+- 定时发布功能
 
 ## 技术栈
 
@@ -22,7 +23,7 @@
 ## 项目结构
 
 ```
-tencent-dev-blog/
+pen-bridge/
 ├── package.json              # 工作区根配置
 ├── electron/                 # Electron 桌面应用（独立于 packages）
 │   ├── src/
@@ -198,7 +199,7 @@ export const trpc = _trpc as any;
 
 ### 数据库
 - 使用 `synchronize: true` 自动迁移，无需手动创建表
-- 数据库文件: `packages/server/data/tencent-dev-blog.db`
+- 数据库文件: `packages/server/data/pen-bridge.db`
 - 该目录已在 `.gitignore` 中
 
 ### 路由文件

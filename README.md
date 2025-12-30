@@ -1,15 +1,20 @@
-# 腾讯云开发者社区文章管理工具
+# PenBridge - 多平台文章管理与发布工具
 
-一个用于管理和发布腾讯云开发者社区文章的桌面应用程序。
+一个用于管理和发布多端文章的桌面应用程序，支持一键发布到多个平台。
 
 ## 功能特性
 
 - **文章管理**: 创建、编辑和组织你的技术文章
 - **Markdown 编辑器**: 使用 Milkdown 编辑器，支持丰富的 Markdown 语法
 - **Word 导入**: 支持从 Word 文档导入内容
-- **腾讯云发布**: 一键发布文章到腾讯云开发者社区
-- **定时发布**: 支持定时发布功能（开发中）
+- **多平台发布**: 一键发布文章到多个平台（持续扩展中）
+- **定时发布**: 支持定时发布功能
 - **自动登录**: 首次手动登录后自动保存登录状态
+
+## 支持的发布平台
+
+- 腾讯云开发者社区 ✅
+- 更多平台开发中...
 
 ## 技术栈
 
@@ -31,7 +36,7 @@
 
 ### 下载预构建版本
 
-前往 [Releases](https://github.com/zero-ljz/tencent-dev-blog/releases) 页面下载适合你系统的安装包：
+前往 [Releases](https://github.com/zero-ljz/pen-bridge/releases) 页面下载适合你系统的安装包：
 
 - **Windows**: `.exe` 安装程序
 - **macOS**: `.dmg` (Intel 和 Apple Silicon)
@@ -41,8 +46,8 @@
 
 ```bash
 # 克隆仓库
-git clone https://github.com/zero-ljz/tencent-dev-blog.git
-cd tencent-dev-blog
+git clone https://github.com/zero-ljz/pen-bridge.git
+cd pen-bridge
 
 # 安装依赖
 bun install
@@ -61,7 +66,7 @@ bun run make:electron
 ## 项目结构
 
 ```
-tencent-dev-blog/
+pen-bridge/
 ├── electron/           # Electron 桌面应用
 ├── packages/
 │   ├── server/         # 后端服务 (Hono + tRPC)
