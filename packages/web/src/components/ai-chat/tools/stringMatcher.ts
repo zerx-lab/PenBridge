@@ -29,12 +29,16 @@ export function normalizeLineEndings(text: string): string {
 
 /**
  * 去除行号前缀
- * 匹配格式："  123 | 内容" 或 "  123→内容"
- * 只匹配 read_article 返回的格式：前面至少有2个空格，行号右对齐
+ * 匹配格式："  1 | 内容" 或 " 10 | 内容" 或 "100 | 内容"
+ * read_article 的格式：行号右对齐（用空格填充） + " | " + 内容
+ *
+ * Bug Fix: 之前的正则 /^[ ]{2,}/ 要求至少2个空格，导致两位数行号无法匹配
+ * 新正则：匹配"0个或多个空格 + 数字 + 至少1个空格 + 分隔符"
  */
 export function stripLineNumbers(text: string): string {
-  // 只匹配行首有至少2个空格的情况，避免误匹配用户真实内容（如 "1 | 步骤一"）
-  return text.replace(/^[ ]{2,}\d+\s*[|→]\s*/gm, '');
+  // 匹配格式：可选空格 + 数字 + 至少1个空格 + | 或 → + 可选空格
+  // 这样可以匹配所有 read_article 的行号格式，同时避免误匹配用户的 "1| 内容"（没有空格）
+  return text.replace(/^\s*\d+\s+[|→]\s*/gm, '');
 }
 
 /**

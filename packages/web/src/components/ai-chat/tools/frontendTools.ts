@@ -336,13 +336,14 @@ export async function executeFrontendTool(
               };
             }
 
-            // 根据策略确定在哪个版本的content中查找
-            const workingContent = matchResult.strategy === 'normalized-whitespace'
-              ? normalizeWhitespace(normalizedContent)
-              : normalizedContent;
+            // Bug Fix: fuzzy 和 normalized-whitespace 策略都是在 fullyNormalizedContent 中匹配的
+            // 所以都需要使用 normalizeWhitespace(normalizedContent) 作为工作内容
+            const workingContent = normalizeWhitespace(normalizedContent);
 
-            // 使用模糊搜索文本的长度作为匹配长度
-            const matchedLength = normalizeLineEndings(args.search).length;
+            // Bug Fix: 使用标准化后的搜索文本长度，而不是原始长度
+            // normalizeWhitespace 会改变文本长度（如 "hello  world" → "hello world"）
+            const normalizedSearchText = normalizeWhitespace(normalizeLineEndings(args.search));
+            const matchedLength = normalizedSearchText.length;
             const matchedText = workingContent.substring(
               matchResult.position,
               matchResult.position + matchedLength
