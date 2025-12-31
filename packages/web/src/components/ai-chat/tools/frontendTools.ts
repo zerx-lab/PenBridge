@@ -328,33 +328,19 @@ export async function executeFrontendTool(
             // 精确匹配或标准化行匹配，可以直接用 replace
             newContent = normalizedContent.replace(normalizedSearch, normalizedReplace);
           } else if (matchResult.strategy === 'normalized-whitespace' || matchResult.strategy === 'fuzzy') {
-            // 对于空白字符标准化和模糊匹配，由于位置映射复杂，回退到完整内容替换
-            // 这些策略的 position 在经过多次标准化的content中，难以准确映射回原始位置
-            // 为安全起见，使用全局唯一匹配替换（intelligentMatch 已验证唯一性）
+            // Bug Fix: 对于空白字符标准化和模糊匹配，由于保留原始空白字符格式的复杂性
+            // 采用最实用的方案：在完全标准化的内容中进行替换，同时保留缩进
+            //
+            // 设计说明：
+            // - normalizeWhitespace 保留前导空格（缩进），只标准化行内空白字符
+            // - 这样可以保持代码/文档的缩进结构，同时统一空白字符格式
+            // - intelligentMatch 已验证唯一性，可以安全使用 replace()
 
-            // 在 normalized content 中查找实际匹配的文本
-            if (matchResult.position === undefined) {
-              return {
-                success: false,
-                error: `智能匹配策略 ${matchResult.strategy} 未返回位置信息`,
-              };
-            }
+            const fullyNormalizedContent = normalizeWhitespace(normalizedContent);
+            const fullyNormalizedSearch = normalizeWhitespace(stripLineNumbers(normalizeLineEndings(args.search)));
 
-            // Bug Fix: fuzzy 和 normalized-whitespace 策略都是在 fullyNormalizedContent 中匹配的
-            // 所以都需要使用 normalizeWhitespace(normalizedContent) 作为工作内容
-            const workingContent = normalizeWhitespace(normalizedContent);
-
-            // Bug Fix: 使用标准化后的搜索文本长度，而不是原始长度
-            // normalizeWhitespace 会改变文本长度（如 "hello  world" → "hello world"）
-            const normalizedSearchText = normalizeWhitespace(normalizeLineEndings(args.search));
-            const matchedLength = normalizedSearchText.length;
-            const matchedText = workingContent.substring(
-              matchResult.position,
-              matchResult.position + matchedLength
-            );
-
-            // 在 normalized content 中替换（使用实际匹配到的文本）
-            newContent = normalizedContent.replace(matchedText, normalizedReplace);
+            // 直接在完全标准化的内容中替换
+            newContent = fullyNormalizedContent.replace(fullyNormalizedSearch, normalizedReplace);
           } else {
             // 未知策略，返回错误
             return {
