@@ -16,7 +16,7 @@ export interface ToolCallRecord {
   name: string;
   arguments: string;
   result?: string;
-  status: "pending" | "running" | "completed" | "failed";
+  status: "pending" | "running" | "completed" | "failed" | "awaiting_confirmation";
   executionLocation: "frontend" | "backend";
   error?: string;
   startedAt?: string;

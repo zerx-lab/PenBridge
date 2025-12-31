@@ -27,10 +27,12 @@ const THINKING_SETTINGS_KEY = "editor-ai-thinking-settings";
 interface UseAIChatOptions {
   articleId?: number;
   toolContext: FrontendToolContext;
+  // 权限检查函数：返回 true 表示需要审核
+  requiresApproval?: (toolName: string) => boolean;
 }
 
 export function useAIChat(options: UseAIChatOptions): UseAIChatReturn {
-  const { articleId, toolContext } = options;
+  const { articleId, toolContext, requiresApproval } = options;
   
   // 状态
   const [session, setSession] = useState<ChatSession | null>(null);
@@ -59,6 +61,10 @@ export function useAIChat(options: UseAIChatOptions): UseAIChatReturn {
   const [pendingChanges, setPendingChanges] = useState<PendingChange[]>([]);
   const [currentPendingChange, setCurrentPendingChange] = useState<PendingChange | null>(null);
   
+  // 使用 ref 跟踪 pendingChanges 的最新值，避免闭包问题
+  const pendingChangesRef = useRef<PendingChange[]>([]);
+  pendingChangesRef.current = pendingChanges;
+  
   // Refs
   const abortControllerRef = useRef<AbortController | null>(null);
   const currentMessageIdRef = useRef<string | null>(null);
@@ -68,6 +74,7 @@ export function useAIChat(options: UseAIChatOptions): UseAIChatReturn {
     loopCount: number;
     assistantContent: string;
     toolCalls: ToolCallRecord[];
+    dbMessageId?: number; // 数据库中消息的 ID，用于后续更新
   } | null>(null);
   
   // 存储已处理的工具调用结果（用于在所有变更处理完后恢复 AI Loop）
@@ -85,6 +92,7 @@ export function useAIChat(options: UseAIChatOptions): UseAIChatReturn {
   const createSessionMutation = trpc.aiChat.createSession.useMutation();
   const getOrCreateSessionMutation = trpc.aiChat.getOrCreateArticleSession.useMutation();
   const addMessageMutation = trpc.aiChat.addMessage.useMutation();
+  const updateMessageMutation = trpc.aiChat.updateMessage.useMutation();
   
   // 加载消息
   const { data: messagesData } = trpc.aiChat.getMessages.useQuery(
@@ -612,11 +620,12 @@ export function useAIChat(options: UseAIChatOptions): UseAIChatReturn {
             : m
         ));
         
-        // 执行工具调用
+        // 执行工具调用（传入权限检查函数）
         const { results: executedToolCalls, pendingChanges: newPendingChanges } = await executeToolCalls(
           toolCalls,
           toolContext,
-          executeBackendTool
+          executeBackendTool,
+          requiresApproval
         );
         
         // 更新消息中的工具调用结果
@@ -628,11 +637,14 @@ export function useAIChat(options: UseAIChatOptions): UseAIChatReturn {
         
         // 如果有待确认的变更，添加到待确认列表并停止 AI Loop
         if (newPendingChanges.length > 0) {
-          setPendingChanges(prev => [...prev, ...newPendingChanges]);
-          // 设置第一个待确认的变更为当前变更
-          if (!currentPendingChange) {
-            setCurrentPendingChange(newPendingChanges[0]);
-          }
+          setPendingChanges(prev => {
+            const updated = [...prev, ...newPendingChanges];
+            // 如果之前没有待确认变更，设置第一个为当前变更
+            if (prev.length === 0) {
+              setCurrentPendingChange(newPendingChanges[0]);
+            }
+            return updated;
+          });
           
           // 保存当前状态，以便用户确认后恢复 AI Loop
           pausedStateRef.current = {
@@ -643,9 +655,10 @@ export function useAIChat(options: UseAIChatOptions): UseAIChatReturn {
           };
           
           // 保存当前消息到数据库（包含工具调用信息和 usage）
+          let dbMessageId: number | undefined;
           if (session) {
             try {
-              await addMessageMutation.mutateAsync({
+              const savedMessage = await addMessageMutation.mutateAsync({
                 sessionId: session.id,
                 role: "assistant",
                 content: assistantContent,
@@ -662,9 +675,15 @@ export function useAIChat(options: UseAIChatOptions): UseAIChatReturn {
                   error: tc.error,
                 })),
               });
+              dbMessageId = savedMessage.id;
             } catch (err) {
               console.error("保存消息失败:", err);
             }
+          }
+          
+          // 将数据库消息 ID 保存到暂存状态
+          if (pausedStateRef.current) {
+            pausedStateRef.current.dbMessageId = dbMessageId;
           }
           
           // 停止 AI Loop，等待用户确认
@@ -699,11 +718,37 @@ export function useAIChat(options: UseAIChatOptions): UseAIChatReturn {
         }
         
         // 构建工具结果消息（只有非待确认的工具才继续）
-        const toolResultMessages = executedToolCalls.map(tc => ({
-          role: "tool" as const,
-          content: tc.result || tc.error || "工具执行完成",
-          tool_call_id: tc.id,
-        }));
+        // 每个工具结果都包含明确的成功/失败状态，确保 AI 知道哪些操作失败了
+        const toolResultMessages = executedToolCalls.map(tc => {
+          if (tc.status === "failed") {
+            return {
+              role: "tool" as const,
+              content: JSON.stringify({ 
+                success: false, 
+                error: tc.error || "工具执行失败",
+                toolName: tc.name,
+              }),
+              tool_call_id: tc.id,
+            };
+          }
+          // 成功的工具调用，解析并包装结果
+          let resultContent = tc.result || "工具执行完成";
+          try {
+            const parsed = JSON.parse(resultContent);
+            // 如果结果中没有 success 字段，添加它
+            if (typeof parsed === "object" && parsed !== null && !("success" in parsed)) {
+              resultContent = JSON.stringify({ success: true, ...parsed });
+            }
+          } catch {
+            // 不是 JSON，包装成带 success 的对象
+            resultContent = JSON.stringify({ success: true, message: resultContent });
+          }
+          return {
+            role: "tool" as const,
+            content: resultContent,
+            tool_call_id: tc.id,
+          };
+        });
         
         // 继续对话（AI Loop）
         const newHistory = [
@@ -767,7 +812,7 @@ export function useAIChat(options: UseAIChatOptions): UseAIChatReturn {
       setIsLoading(false);
       abortControllerRef.current = null;
     }
-  }, [selectedModel, toolContext, session, executeBackendTool, addMessageMutation]);
+  }, [selectedModel, toolContext, session, executeBackendTool, addMessageMutation, requiresApproval]);
   
   // 发送用户消息
   const sendMessage = useCallback(async (content: string) => {
@@ -836,6 +881,14 @@ export function useAIChat(options: UseAIChatOptions): UseAIChatReturn {
     } else {
       setMessages([]);
     }
+    // 重置工具相关状态
+    setPendingChanges([]);
+    setCurrentPendingChange(null);
+    setCurrentLoopCount(0);
+    setError(null);
+    // 清空暂存状态
+    pausedStateRef.current = null;
+    processedToolResultsRef.current.clear();
   }, [session, utils]);
   
   // 创建新会话
@@ -864,17 +917,53 @@ export function useAIChat(options: UseAIChatOptions): UseAIChatReturn {
     }
     
     // 更新暂存的工具调用结果
+    // 注意：只更新待确认变更的结果，保留原来失败的工具调用状态
     const updatedToolCalls = pausedState.toolCalls.map(tc => {
       const result = toolResults.find(r => r.id === tc.id);
-      return result ? { ...tc, result: result.result, status: "completed" as const } : tc;
+      if (result) {
+        // 只有原来是 awaiting_confirmation 的才更新为 completed
+        // 已经是 failed 的保持 failed 状态
+        if (tc.status === "awaiting_confirmation") {
+          return { ...tc, result: result.result, status: "completed" as const };
+        }
+        // 其他状态（如 failed）只更新 result，保持原状态
+        return { ...tc, result: result.result };
+      }
+      return tc;
     });
     
     // 构建工具结果消息
-    const toolResultMessages = updatedToolCalls.map(tc => ({
-      role: "tool" as const,
-      content: tc.result || tc.error || "工具执行完成",
-      tool_call_id: tc.id,
-    }));
+    // 每个工具结果都包含明确的成功/失败状态，确保 AI 知道哪些操作失败了
+    const toolResultMessages = updatedToolCalls.map(tc => {
+      if (tc.status === "failed") {
+        return {
+          role: "tool" as const,
+          content: JSON.stringify({ 
+            success: false, 
+            error: tc.error || "工具执行失败",
+            toolName: tc.name,
+          }),
+          tool_call_id: tc.id,
+        };
+      }
+      // 成功的工具调用，解析并包装结果
+      let resultContent = tc.result || "工具执行完成";
+      try {
+        const parsed = JSON.parse(resultContent);
+        // 如果结果中没有 success 字段，添加它
+        if (typeof parsed === "object" && parsed !== null && !("success" in parsed)) {
+          resultContent = JSON.stringify({ success: true, ...parsed });
+        }
+      } catch {
+        // 不是 JSON，包装成带 success 的对象
+        resultContent = JSON.stringify({ success: true, message: resultContent });
+      }
+      return {
+        role: "tool" as const,
+        content: resultContent,
+        tool_call_id: tc.id,
+      };
+    });
     
     // 继续对话（AI Loop）
     const newHistory = [
@@ -904,23 +993,39 @@ export function useAIChat(options: UseAIChatOptions): UseAIChatReturn {
   
   // 接受待确认的变更
   const acceptPendingChange = useCallback(async (change: PendingChange) => {
-    // 应用变更
-    const result = applyPendingChange(change, toolContext);
+    console.log('[acceptPendingChange] 开始处理变更:', change.id, 'isReadOnly:', change.isReadOnly);
+    console.log('[acceptPendingChange] 当前 pendingChanges:', pendingChanges.map(c => c.id));
     
-    const toolResult = result.success
-      ? JSON.stringify({ 
-          message: change.type === "title" ? "标题已更新" : "内容已更新",
-          accepted: true,
-        })
-      : JSON.stringify({ 
-          message: "应用变更失败",
-          error: result.error,
-        });
+    let toolResult: string;
+    let applySuccess = true;
+    let applyError: string | undefined;
+    
+    // 只读审批：不应用变更，直接返回工具执行的实际结果
+    if (change.isReadOnly) {
+      // change.newValue 中存储的是工具执行的实际结果（JSON 格式）
+      // 直接返回给 AI，让它能够获取到读取的内容
+      toolResult = change.newValue;
+    } else {
+      // 写入操作：应用变更
+      const result = applyPendingChange(change, toolContext);
+      applySuccess = result.success;
+      applyError = result.error;
+      
+      toolResult = result.success
+        ? JSON.stringify({ 
+            message: change.type === "title" ? "标题已更新" : "内容已更新",
+            accepted: true,
+          })
+        : JSON.stringify({ 
+            message: "应用变更失败",
+            error: result.error,
+          });
+    }
     
     // 保存此工具调用的结果，用于后续恢复 AI Loop
     processedToolResultsRef.current.set(change.toolCallId, toolResult);
     
-    if (result.success) {
+    if (applySuccess) {
       // 更新对应工具调用的状态为已完成
       setMessages(prev => prev.map(m => ({
         ...m,
@@ -944,7 +1049,7 @@ export function useAIChat(options: UseAIChatOptions): UseAIChatReturn {
             ? { 
                 ...tc, 
                 status: "failed" as const,
-                error: result.error,
+                error: applyError,
                 completedAt: new Date().toISOString(),
               }
             : tc
@@ -954,6 +1059,7 @@ export function useAIChat(options: UseAIChatOptions): UseAIChatReturn {
     
     // 从待确认列表中移除
     const remaining = pendingChanges.filter(c => c.id !== change.id);
+    
     setPendingChanges(remaining);
     setCurrentPendingChange(remaining[0] || null);
     
@@ -970,12 +1076,39 @@ export function useAIChat(options: UseAIChatOptions): UseAIChatReturn {
         return { id: tc.id, result: tc.result || "工具执行完成" };
       });
       
+      // 更新数据库中的消息（将工具调用状态更新为最终状态）
+      if (pausedStateRef.current.dbMessageId) {
+        try {
+          const updatedToolCalls = pausedStateRef.current.toolCalls.map(tc => {
+            const savedResult = processedToolResultsRef.current.get(tc.id);
+            return {
+              id: tc.id,
+              type: tc.type || ("function" as const),
+              name: tc.name,
+              arguments: tc.arguments,
+              result: savedResult || tc.result,
+              status: "completed" as const,
+              executionLocation: tc.executionLocation || ("frontend" as const),
+              error: tc.error,
+              completedAt: new Date().toISOString(),
+            };
+          });
+          
+          await updateMessageMutation.mutateAsync({
+            id: pausedStateRef.current.dbMessageId,
+            toolCalls: updatedToolCalls,
+          });
+        } catch (err) {
+          console.error("更新消息状态失败:", err);
+        }
+      }
+      
       // 清空已处理结果的缓存
       processedToolResultsRef.current.clear();
       
       await resumeAILoop(toolResults);
     }
-  }, [toolContext, pendingChanges, resumeAILoop]);
+  }, [toolContext, pendingChanges, resumeAILoop, updateMessageMutation]);
   
   // 拒绝待确认的变更
   const rejectPendingChange = useCallback(async (change: PendingChange) => {
@@ -1020,12 +1153,39 @@ export function useAIChat(options: UseAIChatOptions): UseAIChatReturn {
         return { id: tc.id, result: tc.result || "工具执行完成" };
       });
       
+      // 更新数据库中的消息（将工具调用状态更新为最终状态）
+      if (pausedStateRef.current.dbMessageId) {
+        try {
+          const updatedToolCalls = pausedStateRef.current.toolCalls.map(tc => {
+            const savedResult = processedToolResultsRef.current.get(tc.id);
+            return {
+              id: tc.id,
+              type: tc.type || ("function" as const),
+              name: tc.name,
+              arguments: tc.arguments,
+              result: savedResult || tc.result,
+              status: "completed" as const,
+              executionLocation: tc.executionLocation || ("frontend" as const),
+              error: tc.error,
+              completedAt: new Date().toISOString(),
+            };
+          });
+          
+          await updateMessageMutation.mutateAsync({
+            id: pausedStateRef.current.dbMessageId,
+            toolCalls: updatedToolCalls,
+          });
+        } catch (err) {
+          console.error("更新消息状态失败:", err);
+        }
+      }
+      
       // 清空已处理结果的缓存
       processedToolResultsRef.current.clear();
       
       await resumeAILoop(toolResults);
     }
-  }, [pendingChanges, resumeAILoop]);
+  }, [pendingChanges, resumeAILoop, updateMessageMutation]);
   
   // 保存深度思考设置到 localStorage
   useEffect(() => {

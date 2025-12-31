@@ -15,6 +15,8 @@ import {
   PanelRightClose,
   AlertCircle,
   Brain,
+  Settings2,
+  Zap,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -27,8 +29,10 @@ import {
 } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { useAIChat } from "./hooks/useAIChat";
+import { useToolPermissions } from "./hooks/useToolPermissions";
 import { ThinkingBlock } from "./ThinkingBlock";
 import { ToolCallBlock } from "./ToolCallBlock";
+import { ToolPermissionDialog } from "./ToolPermissionDialog";
 import type { AIChatPanelProps, ChatMessage, PendingChange } from "./types";
 
 // 最小宽度（最大宽度不限制，可自由拖拽）
@@ -69,11 +73,12 @@ function AILoadingIndicator({ message }: { message?: string }) {
 interface MessageItemProps {
   message: ChatMessage;
   pendingChanges?: PendingChange[];
+  currentPendingChange?: PendingChange | null;
   onAcceptChange?: (change: PendingChange) => void;
   onRejectChange?: (change: PendingChange) => void;
 }
 
-function MessageItem({ message, pendingChanges, onAcceptChange, onRejectChange }: MessageItemProps) {
+function MessageItem({ message, pendingChanges, currentPendingChange, onAcceptChange, onRejectChange }: MessageItemProps) {
   const isUser = message.role === "user";
   const isStreaming = message.status === "streaming";
   const isFailed = message.status === "failed";
@@ -175,6 +180,7 @@ function MessageItem({ message, pendingChanges, onAcceptChange, onRejectChange }
         <ToolCallBlock 
           toolCalls={message.toolCalls!}
           pendingChanges={pendingChanges}
+          currentPendingChange={currentPendingChange}
           onAcceptChange={onAcceptChange}
           onRejectChange={onRejectChange}
         />
@@ -204,6 +210,7 @@ export function AIChatPanel({
   const [inputValue, setInputValue] = useState("");
   const [internalWidth, setInternalWidth] = useState(externalWidth || DEFAULT_WIDTH);
   const width = externalWidth ?? internalWidth;
+  const [permissionDialogOpen, setPermissionDialogOpen] = useState(false);
   
   // Refs
   const panelRef = useRef<HTMLDivElement>(null);
@@ -214,6 +221,9 @@ export function AIChatPanel({
   
   // 智能滚动状态：追踪用户是否在底部附近
   const shouldAutoScrollRef = useRef(true);
+  
+  // 工具权限配置 Hook
+  const toolPermissions = useToolPermissions();
   
   // AI 聊天 Hook
   const {
@@ -235,12 +245,18 @@ export function AIChatPanel({
     maxLoopCount,
     // 待确认变更
     pendingChanges,
+    currentPendingChange,
     acceptPendingChange,
     rejectPendingChange,
   } = useAIChat({
     articleId: articleContext?.articleId,
     toolContext,
+    // 传入权限检查函数
+    requiresApproval: toolPermissions.requiresApproval,
   });
+  
+  // 判断当前模型是否支持工具调用
+  const supportsToolCalling = selectedModel?.capabilities?.functionCalling?.supported ?? false;
   
   // 计算当前会话的 token 总使用量
   // 优先从 messages 中累计（实时），如果为 0 则使用 session.totalTokens（历史数据）
@@ -399,6 +415,33 @@ export function AIChatPanel({
           )}
         </div>
         <div className="flex items-center gap-1">
+          {/* 工具权限配置按钮 - 仅当模型支持工具调用时显示 */}
+          {supportsToolCalling && (
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className={cn(
+                      "h-6 w-6",
+                      toolPermissions.isYoloMode && "text-amber-500"
+                    )}
+                    onClick={() => setPermissionDialogOpen(true)}
+                  >
+                    {toolPermissions.isYoloMode ? (
+                      <Zap className="h-3.5 w-3.5" />
+                    ) : (
+                      <Settings2 className="h-3.5 w-3.5" />
+                    )}
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="left">
+                  {toolPermissions.isYoloMode ? "YOLO 模式已开启" : "工具权限配置"}
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          )}
           <TooltipProvider>
             <Tooltip>
               <TooltipTrigger asChild>
@@ -490,6 +533,7 @@ export function AIChatPanel({
                     key={message.id || index} 
                     message={message}
                     pendingChanges={pendingChanges}
+                    currentPendingChange={currentPendingChange}
                     onAcceptChange={acceptPendingChange}
                     onRejectChange={rejectPendingChange}
                   />
@@ -538,12 +582,14 @@ export function AIChatPanel({
           </div>
         )}
         
-        {/* 待确认变更提示 - 当有多个待确认变更时显示计数 */}
-        {pendingChanges.length > 1 && (
+        {/* 待确认变更提示 - 当有多个待确认变更时显示进度 */}
+        {pendingChanges.length > 0 && currentPendingChange && (
           <div className="px-4 py-2 bg-amber-50 dark:bg-amber-900/20 border-t border-amber-200 dark:border-amber-800 shrink-0">
             <div className="flex items-center gap-2 text-xs text-amber-700 dark:text-amber-300">
               <AlertCircle className="h-3.5 w-3.5" />
-              <span>还有 {pendingChanges.length - 1} 个修改等待确认</span>
+              <span>
+                正在审核第 {pendingChanges.findIndex(c => c.id === currentPendingChange.id) + 1} / {pendingChanges.length} 个修改
+              </span>
             </div>
           </div>
         )}
@@ -668,6 +714,13 @@ export function AIChatPanel({
           </div>
         </div>
       </div>
+      
+      {/* 工具权限配置对话框 */}
+      <ToolPermissionDialog
+        open={permissionDialogOpen}
+        onOpenChange={setPermissionDialogOpen}
+        permissions={toolPermissions}
+      />
     </>
   );
 }

@@ -41,13 +41,12 @@ export const frontendToolDefinitions: ToolDefinition[] = [
     type: "function",
     function: {
       name: "read_article",
-      description: `读取当前正在编辑的文章内容。支持多种读取模式：
-1. 读取标题：section="title"
-2. 读取全文：section="all" 或 section="content"（不指定行范围时）
-3. 按行读取：指定 startLine 和 endLine 参数，读取指定行范围的内容
+      description: `读取当前正在编辑的文章内容。
 
-返回结果会包含行号信息，格式为 "行号 | 内容"，便于定位和后续编辑。
-对于长文章，建议分段读取以避免超出上下文限制。`,
+- 默认从文章开头读取最多 2000 行
+- 可以通过 startLine 和 endLine 参数指定行范围进行分页读取
+- 返回结果包含行号信息，格式为"行号 | 内容"
+- 超过 2000 行的内容需要使用 startLine/endLine 分页读取`,
       parameters: {
         type: "object",
         properties: {
@@ -59,11 +58,11 @@ export const frontendToolDefinitions: ToolDefinition[] = [
           },
           startLine: {
             type: "number",
-            description: "起始行号（从 1 开始，包含）。指定后将按行读取内容。",
+            description: "起始行号（从 1 开始，包含）",
           },
           endLine: {
             type: "number",
-            description: "结束行号（包含）。如果不指定，默认读取从 startLine 开始的 200 行。",
+            description: "结束行号（包含）。不指定则默认读取 200 行",
           },
         },
       },
@@ -115,64 +114,26 @@ export const frontendToolDefinitions: ToolDefinition[] = [
     type: "function",
     function: {
       name: "replace_content",
-      description: `替换文章中的指定内容。使用智能多层匹配策略，自动处理换行符和空白字符差异。
+      description: `执行精确字符串替换。
 
-**重要提示**：
-- 当使用 read_article 工具读取内容时，返回的内容包含行号前缀（格式："行号 | 内容"）
-- 在使用 replace_content 时，search 参数中**不要包含行号前缀**，只提供实际的文本内容
-- 系统会自动处理换行符差异（LF vs CRLF）和空白字符标准化
-
-**匹配策略**（自动按优先级尝试）：
-1. 精确匹配：完全匹配原文
-2. 标准化匹配：自动去除行号前缀、统一换行符
-3. 空白字符标准化：忽略空格/制表符差异
-4. 模糊匹配：基于相似度的智能匹配
-
-**替换模式**：
-- 默认：要求搜索文本唯一，否则返回所有匹配位置让你选择
-- replaceAll=true：替换所有匹配项
-- replaceAt=N：仅替换第 N 个匹配项（N 从 1 开始）
-- replaceRange：仅替换指定行范围内的匹配项
-
-**最佳实践**：
-1. 提供足够的上下文使搜索文本唯一（建议至少 2-3 行完整内容）
-2. 不要从 read_article 的输出中复制行号前缀
-3. 对于重复内容，使用 replaceAt 或 replaceRange 精确定位
-4. 小范围修改优先使用此工具，大范围重写使用 replace_all_content`,
+- 编辑将失败，如果 search 在文档中找不到，错误信息为"搜索文本未找到匹配"
+- 编辑将失败，如果 search 在文档中找到多次，错误信息为"搜索文本找到多次匹配，需要提供更多上下文来唯一定位"。提供更多上下文使其唯一，或使用 replaceAll: true 替换所有匹配
+- 使用 replaceAll 替换所有匹配项（用于重命名等场景）`,
       parameters: {
         type: "object",
         properties: {
           search: {
             type: "string",
-            description: "要查找的文本内容（不要包含行号前缀，只提供实际内容）",
+            description: "要替换的精确文本",
           },
           replace: {
             type: "string",
-            description: "替换为的文本内容",
+            description: "替换后的文本（必须与 search 不同）",
           },
           replaceAll: {
             type: "boolean",
-            description: "是否替换所有匹配项。默认 false，要求搜索文本唯一",
+            description: "替换所有匹配项（默认 false）",
             default: false,
-          },
-          replaceAt: {
-            type: "number",
-            description: "仅替换第 N 个匹配项（从 1 开始）。用于精确控制替换位置",
-          },
-          replaceRange: {
-            type: "object",
-            description: "限定替换范围（仅在指定行范围内查找并替换）",
-            properties: {
-              startLine: {
-                type: "number",
-                description: "起始行号（从 1 开始，包含）",
-              },
-              endLine: {
-                type: "number",
-                description: "结束行号（包含）",
-              },
-            },
-            required: ["startLine", "endLine"],
           },
         },
         required: ["search", "replace"],

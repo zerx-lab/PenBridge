@@ -61,7 +61,8 @@ export function JuejinTagSelect({
   }, [searchValue]);
 
   // 搜索标签 - 只在有内容时才请求
-  const { data: searchResults, isLoading } = trpc.juejin.searchTags.useQuery(
+  // 使用 isFetching 而不是 isLoading，因为 isLoading 在 enabled=false 时初始状态也可能为 true
+  const { data: searchResults, isFetching } = trpc.juejin.searchTags.useQuery(
     { keyword: debouncedSearchValue },
     {
       enabled: debouncedSearchValue.length >= 1,
@@ -90,8 +91,27 @@ export function JuejinTagSelect({
     })
   );
 
-  // 判断是否正在输入
+  // 判断是否正在输入（防抖中）
   const isTyping = searchValue.trim() !== debouncedSearchValue;
+
+  // 计算 notFoundContent 显示内容
+  // 只有在真正发送请求时才显示 loading
+  const getNotFoundContent = () => {
+    if (isFetching) {
+      // 正在请求 API
+      return <Spin size="small" />;
+    }
+    if (isTyping && searchValue.trim()) {
+      // 正在输入（防抖中），显示提示而不是 loading
+      return "正在输入...";
+    }
+    if (debouncedSearchValue) {
+      // 请求完成但没有结果
+      return "未找到匹配的标签";
+    }
+    // 未输入任何内容
+    return "请输入关键词搜索标签";
+  };
 
   return (
     <Select
@@ -103,15 +123,7 @@ export function JuejinTagSelect({
       filterOption={false}
       onSearch={handleSearch}
       onChange={handleChange}
-      notFoundContent={
-        isLoading || isTyping ? (
-          <Spin size="small" />
-        ) : debouncedSearchValue ? (
-          "未找到匹配的标签"
-        ) : (
-          "请输入关键词搜索标签"
-        )
-      }
+      notFoundContent={getNotFoundContent()}
       options={options}
       style={{ width: "100%" }}
       getPopupContainer={getPopupContainer}

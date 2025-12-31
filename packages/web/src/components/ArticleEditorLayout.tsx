@@ -158,8 +158,8 @@ export interface ArticleEditorLayoutProps {
   // 操作按钮区域（保存、发布等）
   actionButtons: ReactNode;
 
-  // 设置弹窗额外内容
-  settingsContent?: ReactNode;
+  // 设置弹窗额外内容（可以是 ReactNode，或接收 onClose 回调的渲染函数）
+  settingsContent?: ReactNode | ((props: { onClose: () => void }) => ReactNode);
 
   // 可选：标题输入框 ref（用于新建后聚焦）
   titleInputRef?: React.RefObject<HTMLInputElement | null>;
@@ -555,7 +555,9 @@ export function ArticleEditorLayout({
         open={settingsOpen}
         onClose={() => setSettingsOpen(false)}
         className="settings-drawer"
-        mask={false}
+        mask={true}
+        maskClosable={true}
+        maskStyle={{ backgroundColor: 'transparent' }}
         styles={{
           header: { padding: '12px 16px', borderBottom: '1px solid var(--border)' },
           body: { padding: 0 },
@@ -620,7 +622,9 @@ export function ArticleEditorLayout({
             <div className="my-2 border-t" />
 
             {/* 额外设置内容（如导入 Word） */}
-            {settingsContent}
+            {typeof settingsContent === 'function' 
+              ? settingsContent({ onClose: () => setSettingsOpen(false) })
+              : settingsContent}
 
             {/* 分隔线 */}
             <div className="my-2 border-t" />

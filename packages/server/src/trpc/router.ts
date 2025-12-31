@@ -2325,7 +2325,7 @@ export const appRouter = t.router({
             name: z.string(),
             arguments: z.string(),
             result: z.string().optional(),
-            status: z.enum(["pending", "running", "completed", "failed"]),
+            status: z.enum(["pending", "running", "completed", "failed", "awaiting_confirmation"]),
             executionLocation: z.enum(["frontend", "backend"]),
             error: z.string().optional(),
             startedAt: z.string().optional(),

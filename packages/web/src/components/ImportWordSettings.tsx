@@ -5,13 +5,14 @@ import { convertWordToMarkdown } from "@/utils/wordToMarkdown";
 
 interface ImportWordSettingsProps {
   onImport: (title: string, content: string) => void | Promise<void>;
+  onClose?: () => void;
 }
 
 /**
  * 导入 Word 文档的设置面板组件
  * Notion 风格设计，用于在编辑器设置中显示导入功能
  */
-export function ImportWordSettings({ onImport }: ImportWordSettingsProps) {
+export function ImportWordSettings({ onImport, onClose }: ImportWordSettingsProps) {
   const [isImporting, setIsImporting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -28,6 +29,8 @@ export function ImportWordSettings({ onImport }: ImportWordSettingsProps) {
       // 等待 onImport 完成（支持异步保存）
       await onImport(result.title, result.markdown);
       message.success(`已导入并保存: ${result.fileName}`);
+      // 导入成功后关闭设置面板
+      onClose?.();
     } catch (error) {
       console.error("导入 Word 失败:", error);
       message.error(

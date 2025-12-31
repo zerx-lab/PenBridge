@@ -16,6 +16,7 @@ import {
   Minus,
   ChevronDown,
   ChevronUp,
+  Eye,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { PendingChange } from "./types";
@@ -97,47 +98,90 @@ export function InlineDiffPreview({
   };
 
   const isTitle = pendingChange.type === "title";
-  const TypeIcon = isTitle ? Type : FileText;
+  // 判断是否为只读操作（skipDiff 为 true 且 oldValue 为空）
+  const isReadOnly = shouldSkipDiff && pendingChange.oldValue === "";
+  const TypeIcon = isReadOnly ? Eye : (isTitle ? Type : FileText);
 
   return (
-    <div className="rounded-md border border-amber-300 dark:border-amber-700 bg-amber-50/50 dark:bg-amber-950/20">
+    <div className={cn(
+      "rounded-md border",
+      isReadOnly 
+        ? "border-blue-300 dark:border-blue-700 bg-blue-50/50 dark:bg-blue-950/20"
+        : "border-amber-300 dark:border-amber-700 bg-amber-50/50 dark:bg-amber-950/20"
+    )}>
       {/* 头部 */}
       <div 
-        className="flex items-center gap-2 px-3 py-2 bg-amber-100/50 dark:bg-amber-900/30 cursor-pointer"
+        className={cn(
+          "flex items-center gap-2 px-3 py-2 cursor-pointer",
+          isReadOnly 
+            ? "bg-blue-100/50 dark:bg-blue-900/30"
+            : "bg-amber-100/50 dark:bg-amber-900/30"
+        )}
         onClick={() => setIsExpanded(!isExpanded)}
       >
-        <TypeIcon className="h-4 w-4 text-amber-600 dark:text-amber-400" />
-        <span className="text-sm font-medium text-amber-800 dark:text-amber-200">
-          确认{isTitle ? "标题" : "内容"}修改
+        <TypeIcon className={cn(
+          "h-4 w-4",
+          isReadOnly ? "text-blue-600 dark:text-blue-400" : "text-amber-600 dark:text-amber-400"
+        )} />
+        <span className={cn(
+          "text-sm font-medium",
+          isReadOnly ? "text-blue-800 dark:text-blue-200" : "text-amber-800 dark:text-amber-200"
+        )}>
+          {isReadOnly ? "确认执行" : `确认${isTitle ? "标题" : "内容"}修改`}
         </span>
-        <Badge variant="outline" className="text-xs border-amber-400 text-amber-700 dark:text-amber-300">
-          {operationNames[pendingChange.operation] || pendingChange.operation}
-        </Badge>
+        {!isReadOnly && (
+          <Badge variant="outline" className="text-xs border-amber-400 text-amber-700 dark:text-amber-300">
+            {operationNames[pendingChange.operation] || pendingChange.operation}
+          </Badge>
+        )}
         <div className="flex items-center gap-2 ml-auto text-xs">
-          <span className="flex items-center gap-0.5 text-green-600 dark:text-green-400">
-            <Plus className="h-3 w-3" />
-            {changeStats.added}
-          </span>
-          <span className="flex items-center gap-0.5 text-red-600 dark:text-red-400">
-            <Minus className="h-3 w-3" />
-            {changeStats.removed}
-          </span>
+          {!isReadOnly && (
+            <>
+              <span className="flex items-center gap-0.5 text-green-600 dark:text-green-400">
+                <Plus className="h-3 w-3" />
+                {changeStats.added}
+              </span>
+              <span className="flex items-center gap-0.5 text-red-600 dark:text-red-400">
+                <Minus className="h-3 w-3" />
+                {changeStats.removed}
+              </span>
+            </>
+          )}
           {isExpanded ? (
-            <ChevronUp className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+            <ChevronUp className={cn(
+              "h-4 w-4",
+              isReadOnly ? "text-blue-600 dark:text-blue-400" : "text-amber-600 dark:text-amber-400"
+            )} />
           ) : (
-            <ChevronDown className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+            <ChevronDown className={cn(
+              "h-4 w-4",
+              isReadOnly ? "text-blue-600 dark:text-blue-400" : "text-amber-600 dark:text-amber-400"
+            )} />
           )}
         </div>
       </div>
 
       {/* 描述 */}
-      <div className="px-3 py-1.5 text-xs text-amber-700 dark:text-amber-300 border-b border-amber-200 dark:border-amber-800">
+      <div className={cn(
+        "px-3 py-1.5 text-xs border-b",
+        isReadOnly 
+          ? "text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-800"
+          : "text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800"
+      )}>
         {pendingChange.description}
       </div>
 
-      {/* Diff 预览区域 - 使用原生 overflow 而不是 ScrollArea 避免层叠问题 */}
+      {/* 预览区域 */}
       {isExpanded && (
         <div className="max-h-[200px] overflow-auto">
+          {/* 只读操作：显示执行结果 */}
+          {isReadOnly ? (
+            <div className="p-3">
+              <pre className="text-xs bg-muted/50 rounded p-2 overflow-x-auto whitespace-pre-wrap break-all">
+                {pendingChange.newValue || "（无返回内容）"}
+              </pre>
+            </div>
+          ) : (
           <div className="font-mono text-xs">
             {diffLines.length === 0 ? (
               <div className="flex items-center justify-center h-16 text-muted-foreground">
@@ -187,11 +231,17 @@ export function InlineDiffPreview({
               </table>
             )}
           </div>
+          )}
         </div>
       )}
 
       {/* 操作按钮 - 确保 z-index 和 position 正确 */}
-      <div className="relative z-10 flex items-center justify-end gap-2 px-3 py-2 bg-amber-100/30 dark:bg-amber-900/20 border-t border-amber-200 dark:border-amber-800">
+      <div className={cn(
+        "relative z-10 flex items-center justify-end gap-2 px-3 py-2 border-t",
+        isReadOnly 
+          ? "bg-blue-100/30 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800"
+          : "bg-amber-100/30 dark:bg-amber-900/20 border-amber-200 dark:border-amber-800"
+      )}>
         <Button
           variant="outline"
           size="sm"

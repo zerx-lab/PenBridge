@@ -183,6 +183,8 @@ const mutation = trpc.xxx.useMutation({
 
 ## 重要注意事项
 
+- 专注于当前任务,不修改无关代码
+
 ### 版本兼容性
 - **React Query**: 使用 v4.x（`isLoading` 而非 `isPending`）
 - **tRPC**: 使用 v10.x（`useContext()` 而非 `useUtils()`）

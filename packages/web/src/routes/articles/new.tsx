@@ -62,7 +62,7 @@ function NewArticlePage() {
       onContentChange={setContent}
       breadcrumbLabel="新建"
       editorKey={editorKey}
-      settingsContent={<ImportWordSettings onImport={handleWordImport} />}
+      settingsContent={({ onClose }) => <ImportWordSettings onImport={handleWordImport} onClose={onClose} />}
       actionButtons={
         <Button
           size="sm"

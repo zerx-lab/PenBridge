@@ -2,6 +2,170 @@
  * AI 聊天相关类型定义
  */
 
+// 工具执行位置
+export type ToolExecutionLocation = "frontend" | "backend";
+
+// 工具定义（统一的工具信息，用于权限配置、UI展示等）
+export interface ToolDefinition {
+  // 工具名称（唯一标识）
+  name: string;
+  // 显示名称
+  displayName: string;
+  // 工具描述
+  description: string;
+  // 工具类型：read（只读）、write（修改）
+  type: "read" | "write";
+  // 执行位置：前端或后端
+  executionLocation: ToolExecutionLocation;
+  // 默认是否需要审核
+  defaultRequiresApproval: boolean;
+}
+
+// 统一的工具注册表 - 所有工具都在这里定义
+// 添加新工具时只需在此处添加，其他地方会自动同步
+export const TOOL_REGISTRY: ToolDefinition[] = [
+  // ========== 前端工具 ==========
+  {
+    name: "read_article",
+    displayName: "读取文章",
+    description: "读取当前文章的内容",
+    type: "read",
+    executionLocation: "frontend",
+    defaultRequiresApproval: true,
+  },
+  {
+    name: "update_title",
+    displayName: "更新标题",
+    description: "修改文章标题",
+    type: "write",
+    executionLocation: "frontend",
+    defaultRequiresApproval: true,
+  },
+  {
+    name: "insert_content",
+    displayName: "插入内容",
+    description: "在指定位置插入新内容",
+    type: "write",
+    executionLocation: "frontend",
+    defaultRequiresApproval: true,
+  },
+  {
+    name: "replace_content",
+    displayName: "替换内容",
+    description: "查找并替换部分内容",
+    type: "write",
+    executionLocation: "frontend",
+    defaultRequiresApproval: true,
+  },
+  {
+    name: "replace_all_content",
+    displayName: "替换全部内容",
+    description: "替换文章的全部内容",
+    type: "write",
+    executionLocation: "frontend",
+    defaultRequiresApproval: true,
+  },
+  // ========== 后端工具 ==========
+  {
+    name: "query_articles",
+    displayName: "查询文章",
+    description: "搜索已有的文章列表",
+    type: "read",
+    executionLocation: "backend",
+    defaultRequiresApproval: true,
+  },
+  {
+    name: "get_article_by_id",
+    displayName: "获取文章详情",
+    description: "获取指定文章的详细信息",
+    type: "read",
+    executionLocation: "backend",
+    defaultRequiresApproval: true,
+  },
+  {
+    name: "view_image",
+    displayName: "查看图片",
+    description: "使用视觉模型分析图片内容",
+    type: "read",
+    executionLocation: "backend",
+    defaultRequiresApproval: true,
+  },
+];
+
+// 工具注册表的便捷访问方法
+export const ToolRegistry = {
+  // 获取所有工具
+  getAll: () => TOOL_REGISTRY,
+  
+  // 根据名称获取工具定义
+  getByName: (name: string) => TOOL_REGISTRY.find(t => t.name === name),
+  
+  // 获取前端工具列表
+  getFrontendTools: () => TOOL_REGISTRY.filter(t => t.executionLocation === "frontend"),
+  
+  // 获取后端工具列表
+  getBackendTools: () => TOOL_REGISTRY.filter(t => t.executionLocation === "backend"),
+  
+  // 获取所有前端工具名称
+  getFrontendToolNames: () => TOOL_REGISTRY.filter(t => t.executionLocation === "frontend").map(t => t.name),
+  
+  // 获取所有后端工具名称
+  getBackendToolNames: () => TOOL_REGISTRY.filter(t => t.executionLocation === "backend").map(t => t.name),
+  
+  // 判断是否为前端工具
+  isFrontendTool: (name: string) => {
+    const tool = TOOL_REGISTRY.find(t => t.name === name);
+    return tool?.executionLocation === "frontend";
+  },
+  
+  // 判断是否为修改类工具
+  isWriteTool: (name: string) => {
+    const tool = TOOL_REGISTRY.find(t => t.name === name);
+    return tool?.type === "write";
+  },
+  
+  // 获取只读工具
+  getReadTools: () => TOOL_REGISTRY.filter(t => t.type === "read"),
+  
+  // 获取修改工具
+  getWriteTools: () => TOOL_REGISTRY.filter(t => t.type === "write"),
+};
+
+// 工具权限配置（兼容旧类型）
+export interface ToolPermission {
+  toolName: string;
+  displayName: string;
+  description: string;
+  requiresApproval: boolean;
+  type: "read" | "write";
+}
+
+// 工具权限设置
+export interface ToolPermissionSettings {
+  // YOLO 模式：开启后所有工具都不需要审核
+  yoloMode: boolean;
+  // 各工具的权限配置
+  permissions: Record<string, boolean>; // toolName -> requiresApproval
+}
+
+// 从工具注册表生成默认工具列表（兼容旧代码）
+export const DEFAULT_TOOLS: ToolPermission[] = TOOL_REGISTRY.map(tool => ({
+  toolName: tool.name,
+  displayName: tool.displayName,
+  description: tool.description,
+  requiresApproval: tool.defaultRequiresApproval,
+  type: tool.type,
+}));
+
+// 默认权限设置
+export const DEFAULT_PERMISSION_SETTINGS: ToolPermissionSettings = {
+  yoloMode: false,
+  permissions: TOOL_REGISTRY.reduce((acc, tool) => {
+    acc[tool.name] = tool.defaultRequiresApproval;
+    return acc;
+  }, {} as Record<string, boolean>),
+};
+
 // 待确认的变更
 export interface PendingChange {
   id: string;
@@ -17,6 +181,8 @@ export interface PendingChange {
   position?: "start" | "end";
   // 性能优化：对于大文件跳过 Diff 计算
   skipDiff?: boolean;
+  // 只读审批：标识这是一个只读工具的审批，确认时不会修改文章内容
+  isReadOnly?: boolean;
 }
 
 // 工具调用记录

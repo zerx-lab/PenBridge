@@ -5,7 +5,8 @@
  */
 
 import type { FrontendToolContext, ToolCallRecord, PendingChange } from "../types";
-import { intelligentMatch, normalizeLineEndings, stripLineNumbers, normalizeWhitespace } from "./stringMatcher";
+import { ToolRegistry } from "../types";
+import { exactReplace } from "./stringMatcher";
 import { shouldSkipDiff } from "./optimizedDiff";
 
 
@@ -20,15 +21,19 @@ export interface ToolExecutionResult {
 }
 
 /**
- * 判断是否是修改类工具（需要用户确认）
+ * 判断是否是修改类工具（默认需要用户确认）
+ * 使用工具注册表进行判断，确保与工具定义保持一致
  */
 export function isModifyingTool(toolName: string): boolean {
-  return [
-    "update_title",
-    "insert_content",
-    "replace_content",
-    "replace_all_content",
-  ].includes(toolName);
+  return ToolRegistry.isWriteTool(toolName);
+}
+
+/**
+ * 获取所有前端工具名称
+ * 使用工具注册表获取，确保与工具定义保持一致
+ */
+export function getAllFrontendToolNames(): string[] {
+  return ToolRegistry.getFrontendToolNames();
 }
 
 /**
@@ -55,6 +60,7 @@ export async function executeFrontendTool(
         const section = args.section || "all";
         const startLine = args.startLine as number | undefined;
         const endLine = args.endLine as number | undefined;
+        const MAX_LINES = 2000; // 最大读取行数限制
         
         // 将内容按行分割
         const lines = context.content.split('\n');
@@ -63,9 +69,15 @@ export async function executeFrontendTool(
         // 如果指定了行范围，按行读取
         if (startLine !== undefined) {
           const start = Math.max(1, startLine);
-          const end = endLine !== undefined 
+          // 限制最大读取行数
+          let end = endLine !== undefined 
             ? Math.min(totalLines, endLine) 
             : Math.min(totalLines, start + 199); // 默认读取 200 行
+          
+          // 确保不超过最大行数限制
+          if (end - start + 1 > MAX_LINES) {
+            end = start + MAX_LINES - 1;
+          }
           
           // 提取指定行范围的内容（带行号）
           const selectedLines: string[] = [];
@@ -89,13 +101,14 @@ export async function executeFrontendTool(
           };
         }
         
-        // 不指定行范围时的传统模式
+        // 不指定行范围时的默认模式（限制最大 2000 行）
         switch (section) {
           case "title":
             return { success: true, result: { title: context.title } };
           case "content": {
-            // 为完整内容也添加行号
-            const numberedLines = lines.map((line, i) => {
+            // 限制最大读取行数
+            const linesToRead = Math.min(totalLines, MAX_LINES);
+            const numberedLines = lines.slice(0, linesToRead).map((line, i) => {
               const lineNum = String(i + 1).padStart(String(totalLines).length, ' ');
               return `${lineNum} | ${line}`;
             });
@@ -104,12 +117,16 @@ export async function executeFrontendTool(
               result: { 
                 content: numberedLines.join('\n'),
                 totalLines,
+                startLine: 1,
+                endLine: linesToRead,
+                hasMoreAfter: linesToRead < totalLines,
               } 
             };
           }
           default: {
-            // all: 返回标题和带行号的内容
-            const numberedLines = lines.map((line, i) => {
+            // all: 返回标题和带行号的内容（限制最大 2000 行）
+            const linesToRead = Math.min(totalLines, MAX_LINES);
+            const numberedLines = lines.slice(0, linesToRead).map((line, i) => {
               const lineNum = String(i + 1).padStart(String(totalLines).length, ' ');
               return `${lineNum} | ${line}`;
             });
@@ -119,6 +136,9 @@ export async function executeFrontendTool(
                 title: context.title,
                 content: numberedLines.join('\n'),
                 totalLines,
+                startLine: 1,
+                endLine: linesToRead,
+                hasMoreAfter: linesToRead < totalLines,
               }
             };
           }
@@ -195,34 +215,30 @@ export async function executeFrontendTool(
           return { success: false, error: "搜索文本不能为空或仅包含空白字符" };
         }
 
-        // 使用智能匹配
-        const matchResult = intelligentMatch(context.content, args.search, {
-          requireUnique: !args.replaceAll,
-          maxAlternatives: 5,
-          fuzzyThreshold: 0.85,
-        });
+        // 使用 replaceAll 参数
+        const useReplaceAll = args.replaceAll === true;
 
-        // 匹配失败
-        if (!matchResult.found) {
-          let errorMessage = matchResult.warnings.join('\n');
+        // 使用精确匹配（Claude Code 风格）
+        const replaceResult = exactReplace(
+          context.content,
+          args.search,
+          args.replace,
+          { replaceAll: useReplaceAll }
+        );
 
-          // 如果有候选匹配，列出来
-          if (matchResult.alternatives && matchResult.alternatives.length > 0) {
-            errorMessage += `\n\n找到 ${matchResult.alternatives.length} 个可能的匹配位置：\n`;
-            matchResult.alternatives.forEach((alt, i) => {
-              errorMessage += `\n${i + 1}. 第 ${alt.lineNumber} 行（相似度 ${(alt.similarity * 100).toFixed(0)}%）：\n${alt.preview}\n`;
+        // 替换失败
+        if (!replaceResult.success) {
+          let errorMessage = replaceResult.error || '替换失败';
+
+          // 如果有多个匹配，显示位置信息
+          if (replaceResult.matchPreviews && replaceResult.matchPreviews.length > 0) {
+            errorMessage += `\n\n找到 ${replaceResult.matchCount} 个匹配位置：\n`;
+            replaceResult.matchPreviews.forEach((preview, i) => {
+              errorMessage += `\n${i + 1}. 第 ${preview.lineNumber} 行：\n${preview.preview}\n`;
             });
             errorMessage += `\n建议：\n`;
             errorMessage += `1. 提供更多上下文使搜索文本唯一\n`;
-            errorMessage += `2. 使用 replaceAll: true 替换所有匹配\n`;
-            errorMessage += `3. 使用 replaceAt: N 只替换第 N 个匹配\n`;
-            errorMessage += `4. 使用 replaceRange 限定行范围`;
-          } else {
-            errorMessage += `\n\n可能的原因：\n`;
-            errorMessage += `- 搜索文本包含了行号前缀（如 "1 | "），请只提供实际内容\n`;
-            errorMessage += `- 换行符不匹配（Windows CRLF vs Unix LF）\n`;
-            errorMessage += `- 空白字符（空格、制表符）不一致\n`;
-            errorMessage += `\n提示：系统已自动尝试标准化换行符和空白字符，但仍未找到匹配`;
+            errorMessage += `2. 使用 replaceAll: true 替换所有匹配`;
           }
 
           return {
@@ -231,149 +247,17 @@ export async function executeFrontendTool(
           };
         }
 
-        // 执行替换
-        let newContent: string;
-        let description: string;
-        let occurrences = 1;
-
-        if (args.replaceAll) {
-          // 替换所有匹配
-          const normalizedContent = normalizeLineEndings(context.content);
-          const normalizedSearch = stripLineNumbers(normalizeLineEndings(args.search));
-          const normalizedReplace = normalizeLineEndings(args.replace);
-
-          // 验证是否找到匹配
-          occurrences = normalizedContent.split(normalizedSearch).length - 1;
-          if (occurrences === 0) {
-            return {
-              success: false,
-              error: `未找到匹配内容。可能的原因：\n- 搜索文本包含了行号前缀\n- 换行符不匹配\n- 内容不存在\n\n提示：使用不带 replaceAll 参数的 replace_content 可以获得智能匹配和详细错误信息。`,
-            };
-          }
-
-          newContent = normalizedContent.replaceAll(normalizedSearch, normalizedReplace);
-          description = `替换所有 ${occurrences} 处匹配`;
-        } else if (args.replaceAt !== undefined) {
-          // 替换第 N 个匹配
-          const n = args.replaceAt;
-          const normalizedContent = normalizeLineEndings(context.content);
-          const normalizedSearch = stripLineNumbers(normalizeLineEndings(args.search));
-          const normalizedReplace = normalizeLineEndings(args.replace);
-
-          const parts = normalizedContent.split(normalizedSearch);
-          const matchCount = parts.length - 1;
-
-          if (matchCount === 0) {
-            return {
-              success: false,
-              error: `未找到匹配内容。可能的原因：\n- 搜索文本包含了行号前缀\n- 换行符不匹配\n- 内容不存在\n\n提示：使用不带 replaceAt 参数的 replace_content 可以获得智能匹配和详细错误信息。`,
-            };
-          }
-
-          if (n < 1 || n > matchCount) {
-            return {
-              success: false,
-              error: `replaceAt=${n} 超出范围（共找到 ${matchCount} 个匹配）`,
-            };
-          }
-
-          // 只替换第 n 个
-          newContent = parts.slice(0, n).join(normalizedSearch) +
-                      normalizedReplace +
-                      parts.slice(n + 1).join(normalizedSearch);
-          description = `替换第 ${n}/${matchCount} 处匹配`;
-        } else if (args.replaceRange) {
-          // 替换指定行范围内的匹配
-          const { startLine, endLine } = args.replaceRange;
-
-          // Bug Fix: 需要先标准化整个内容，然后再按行分割
-          // 否则 rangeContent 和 normalizedSearch 的换行符可能不匹配
-          const normalizedContent = normalizeLineEndings(context.content);
-          const lines = normalizedContent.split('\n');
-
-          if (startLine < 1 || endLine > lines.length || startLine > endLine) {
-            return {
-              success: false,
-              error: `行范围 ${startLine}-${endLine} 无效（文档共 ${lines.length} 行）`,
-            };
-          }
-
-          const beforeLines = lines.slice(0, startLine - 1);
-          const rangeLines = lines.slice(startLine - 1, endLine);
-          const afterLines = lines.slice(endLine);
-
-          const normalizedSearch = stripLineNumbers(normalizeLineEndings(args.search));
-          const normalizedReplace = normalizeLineEndings(args.replace);
-          const rangeContent = rangeLines.join('\n');  // 现在是标准化后的内容
-
-          // 验证是否找到匹配
-          occurrences = rangeContent.split(normalizedSearch).length - 1;
-          if (occurrences === 0) {
-            return {
-              success: false,
-              error: `在第 ${startLine}-${endLine} 行范围内未找到匹配内容。可能的原因：\n- 搜索文本包含了行号前缀\n- 换行符不匹配\n- 该行范围内不存在该内容\n\n提示：使用不带 replaceRange 参数的 replace_content 可以获得智能匹配和详细错误信息。`,
-            };
-          }
-
-          const newRangeContent = rangeContent.replaceAll(normalizedSearch, normalizedReplace);
-
-          // 处理空字符串情况：空字符串 split('\n') 返回 ['']，会产生一个空行
-          const newRangeLines = newRangeContent ? newRangeContent.split('\n') : [];
-          newContent = [...beforeLines, ...newRangeLines, ...afterLines].join('\n');
-          description = `替换第 ${startLine}-${endLine} 行内的 ${occurrences} 处匹配`;
-        } else {
-          // 单次替换（已验证唯一性）
-          const normalizedContent = normalizeLineEndings(context.content);
-          const normalizedSearch = stripLineNumbers(normalizeLineEndings(args.search));
-          const normalizedReplace = normalizeLineEndings(args.replace);
-
-          // 根据匹配策略选择替换方法
-          if (matchResult.strategy === 'exact' || matchResult.strategy === 'normalized-lines') {
-            // 精确匹配或标准化行匹配，可以直接用 replace
-            newContent = normalizedContent.replace(normalizedSearch, normalizedReplace);
-          } else if (matchResult.strategy === 'normalized-whitespace' || matchResult.strategy === 'fuzzy') {
-            // Bug Fix: 对于空白字符标准化和模糊匹配，由于保留原始空白字符格式的复杂性
-            // 采用最实用的方案：在完全标准化的内容中进行替换，同时保留缩进
-            //
-            // 设计说明：
-            // - normalizeWhitespace 保留前导空格（缩进），只标准化行内空白字符
-            // - 这样可以保持代码/文档的缩进结构，同时统一空白字符格式
-            // - intelligentMatch 已验证唯一性，可以安全使用 replace()
-
-            const fullyNormalizedContent = normalizeWhitespace(normalizedContent);
-            const fullyNormalizedSearch = normalizeWhitespace(stripLineNumbers(normalizeLineEndings(args.search)));
-
-            // 直接在完全标准化的内容中替换
-            newContent = fullyNormalizedContent.replace(fullyNormalizedSearch, normalizedReplace);
-          } else {
-            // 未知策略，返回错误
-            return {
-              success: false,
-              error: `不支持的匹配策略: ${matchResult.strategy}`,
-            };
-          }
-
-          description = `替换匹配的内容（${matchResult.strategy} 策略）`;
-
-          if (matchResult.warnings.length > 0) {
-            description += ` - ${matchResult.warnings.join(', ')}`;
-          }
-        }
-
         // 检查是否应该跳过 Diff（文件太大）
-        const diffCheck = shouldSkipDiff(context.content, newContent, 5 * 1024 * 1024);
+        const diffCheck = shouldSkipDiff(context.content, replaceResult.newContent!, 5 * 1024 * 1024);
 
         // 返回待确认的变更
-        // 使用 toolCallId 作为 PendingChange.id，确保唯一性
         return {
           success: true,
           result: {
             message: "内容替换待确认",
             requiresConfirmation: true,
-            matchStrategy: matchResult.strategy,
-            confidence: matchResult.confidence,
-            warnings: matchResult.warnings,
-            occurrences,
+            matchCount: replaceResult.matchCount,
+            warnings: replaceResult.warnings,
             skipDiff: diffCheck.shouldSkip,
             diffSkipReason: diffCheck.reason,
           },
@@ -383,8 +267,10 @@ export async function executeFrontendTool(
             type: "content",
             operation: "replace",
             oldValue: context.content,
-            newValue: newContent,
-            description,
+            newValue: replaceResult.newContent!,
+            description: useReplaceAll 
+              ? `替换所有 ${replaceResult.matchCount} 处匹配` 
+              : `替换匹配的内容`,
             searchText: args.search,
             replaceText: args.replace,
             skipDiff: diffCheck.shouldSkip,
@@ -462,32 +348,33 @@ export function applyPendingChange(
 
 /**
  * 检查是否为前端工具
+ * 使用工具注册表进行判断，确保与工具定义保持一致
  */
 export function isFrontendTool(toolName: string): boolean {
-  const frontendTools = [
-    "read_article",
-    "update_title",
-    "insert_content",
-    "replace_content",
-    "replace_all_content",
-  ];
-  return frontendTools.includes(toolName);
+  return ToolRegistry.isFrontendTool(toolName);
 }
 
 /**
  * 批量执行工具调用
  * 返回执行结果和待确认的变更列表
+ * @param requiresApprovalFn - 检查工具是否需要审核的函数（返回 true 表示需要审核）
  */
 export async function executeToolCalls(
   toolCalls: ToolCallRecord[],
   context: FrontendToolContext,
-  executeBackendTool: (toolCallId: string, toolName: string, args: string) => Promise<{ success: boolean; result?: any; error?: string }>
+  executeBackendTool: (toolCallId: string, toolName: string, args: string) => Promise<{ success: boolean; result?: any; error?: string }>,
+  requiresApprovalFn?: (toolName: string) => boolean
 ): Promise<{ results: ToolCallRecord[]; pendingChanges: PendingChange[] }> {
   const results: ToolCallRecord[] = [];
   const pendingChanges: PendingChange[] = [];
 
   for (const toolCall of toolCalls) {
     const startedAt = new Date().toISOString();
+
+    // 检查此工具是否需要审核（默认修改类工具需要审核）
+    const needsApproval = requiresApprovalFn 
+      ? requiresApprovalFn(toolCall.name) 
+      : isModifyingTool(toolCall.name);
 
     let result: ToolExecutionResult;
 
@@ -500,27 +387,117 @@ export async function executeToolCalls(
         context
       );
 
-      // 如果有待确认的变更
+      // 如果有待确认的变更（修改类工具）
       if (result.pendingChange) {
-        pendingChanges.push(result.pendingChange);
+        // 如果需要审核，添加到待确认列表
+        if (needsApproval) {
+          pendingChanges.push(result.pendingChange);
 
-        // 🔧 修复：更新 context.content 为新值，使后续工具调用基于最新内容
-        // 这解决了同一轮对话中多个 replace_content 调用时，后面的替换会覆盖前面替换的 bug
-        if (result.pendingChange.type === 'content' && result.pendingChange.newValue) {
-          context.content = result.pendingChange.newValue;
+          // 更新 context.content 为新值，使后续工具调用基于最新内容
+          // 这解决了同一轮对话中多个 replace_content 调用时，后面的替换会覆盖前面替换的 bug
+          if (result.pendingChange.type === 'content' && result.pendingChange.newValue) {
+            context.content = result.pendingChange.newValue;
+          }
+
+          results.push({
+            ...toolCall,
+            status: "awaiting_confirmation",
+            result: result.result ? JSON.stringify(result.result) : undefined,
+            pendingChange: result.pendingChange,
+            startedAt,
+          });
+          continue;
+        } else {
+          // 不需要审核，直接应用变更
+          const applyResult = applyPendingChange(result.pendingChange, context);
+          
+          // 更新 context.content 为新值
+          if (result.pendingChange.type === 'content' && result.pendingChange.newValue) {
+            context.content = result.pendingChange.newValue;
+          }
+          
+          results.push({
+            ...toolCall,
+            status: applyResult.success ? "completed" : "failed",
+            result: applyResult.success 
+              ? JSON.stringify({ 
+                  message: result.pendingChange.type === "title" ? "标题已更新" : "内容已更新",
+                  autoApproved: true,
+                })
+              : undefined,
+            error: applyResult.error,
+            startedAt,
+            completedAt: new Date().toISOString(),
+          });
+          continue;
         }
-
+      }
+      
+      // 只读工具：如果需要审核，创建一个待确认的变更让用户确认
+      if (needsApproval && result.success) {
+        const toolDef = ToolRegistry.getByName(toolCall.name);
+        const readOnlyPendingChange: PendingChange = {
+          id: toolCall.id,
+          toolCallId: toolCall.id,
+          type: "content",
+          operation: "update",
+          oldValue: "",
+          newValue: result.result ? JSON.stringify(result.result, null, 2) : "",
+          description: `${toolDef?.displayName || toolCall.name}`,
+          skipDiff: true, // 只读操作不显示 diff
+          isReadOnly: true, // 标记为只读审批，确认时不会修改文章内容
+        };
+        
+        pendingChanges.push(readOnlyPendingChange);
+        
         results.push({
           ...toolCall,
           status: "awaiting_confirmation",
           result: result.result ? JSON.stringify(result.result) : undefined,
-          pendingChange: result.pendingChange,
+          pendingChange: readOnlyPendingChange,
           startedAt,
         });
         continue;
       }
     } else {
       // 后端执行
+      // 如果需要审核，创建一个待确认的变更
+      if (needsApproval) {
+        // 先执行后端工具获取结果
+        result = await executeBackendTool(
+          toolCall.id,
+          toolCall.name,
+          toolCall.arguments
+        );
+        
+        // 创建一个"只读审核"的待确认变更（用于显示结果让用户确认）
+        const toolDef = ToolRegistry.getByName(toolCall.name);
+        const readOnlyPendingChange: PendingChange = {
+          id: toolCall.id,
+          toolCallId: toolCall.id,
+          type: "content",
+          operation: "update",
+          oldValue: "",
+          newValue: result.result ? JSON.stringify(result.result, null, 2) : "",
+          description: `${toolDef?.displayName || toolCall.name}`,
+          skipDiff: true, // 只读操作不显示 diff
+          isReadOnly: true, // 标记为只读审批，确认时不会修改文章内容
+        };
+        
+        pendingChanges.push(readOnlyPendingChange);
+        
+        results.push({
+          ...toolCall,
+          status: "awaiting_confirmation",
+          result: result.result ? JSON.stringify(result.result) : undefined,
+          error: result.error,
+          pendingChange: readOnlyPendingChange,
+          startedAt,
+        });
+        continue;
+      }
+      
+      // 不需要审核，直接执行
       result = await executeBackendTool(
         toolCall.id,
         toolCall.name,
