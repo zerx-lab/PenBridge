@@ -1,6 +1,6 @@
 {
   "name": "pen-bridge-electron",
-  "version": "1.0.0",
+  "version": "0.3.5",
   "description": "PenBridge - 文章管理与发布工具",
   "author": "PenBridge Team",
   "main": "dist/main.js",
