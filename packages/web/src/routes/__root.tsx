@@ -19,6 +19,7 @@ import {
 } from "@/components/ui/tooltip";
 import TitleBar from "@/components/TitleBar";
 import { FileTree } from "@/components/FileTree";
+import { UpdateNotification } from "@/components/UpdateNotification";
 import { isAuthenticated, clearAuthToken, getAuthUser } from "@/utils/auth";
 import { isServerConfiguredSync } from "@/utils/serverConfig";
 import { trpc } from "@/utils/trpc";
@@ -292,6 +293,9 @@ function RootComponent() {
               </div>
             </main>
           </div>
+
+          {/* 更新通知（Electron 环境） */}
+          <UpdateNotification />
         </div>
       </TooltipProvider>
     </App>

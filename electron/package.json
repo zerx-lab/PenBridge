@@ -20,7 +20,8 @@
     "dist:linux": "electron-builder --linux"
   },
   "dependencies": {
-    "electron-store": "^8.1.0"
+    "electron-store": "^8.1.0",
+    "electron-updater": "^6.6.2"
   },
   "devDependencies": {
     "@electron-forge/cli": "^7.10.2",

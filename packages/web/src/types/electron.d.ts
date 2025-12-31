@@ -54,12 +54,34 @@ export interface ElectronShellAPI {
   openExternal: (url: string) => Promise<{ success: boolean; message?: string }>;
 }
 
+// 更新状态类型
+export interface UpdateStatus {
+  checking: boolean;
+  available: boolean;
+  downloading: boolean;
+  downloaded: boolean;
+  error: string | null;
+  progress: number;
+  version: string | null;
+  releaseNotes: string | null;
+}
+
+export interface ElectronUpdaterAPI {
+  check: () => Promise<UpdateStatus>;
+  download: () => Promise<UpdateStatus>;
+  install: () => void;
+  getStatus: () => Promise<UpdateStatus>;
+  getVersion: () => Promise<string>;
+  onStatusChange: (callback: (status: UpdateStatus) => void) => () => void;
+}
+
 export interface ElectronAPI {
   window: ElectronWindowAPI;
   auth: ElectronAuthAPI;
   juejinAuth: ElectronJuejinAuthAPI;
   serverConfig: ElectronServerConfigAPI;
   shell: ElectronShellAPI;
+  updater: ElectronUpdaterAPI;
   platform: string;
 }
 

@@ -76,6 +76,26 @@ contextBridge.exposeInMainWorld("electronAPI", {
     // 在系统默认浏览器中打开外部链接
     openExternal: (url: string) => ipcRenderer.invoke("shell:openExternal", url),
   },
+
+  // 自动更新相关
+  updater: {
+    // 检查更新
+    check: () => ipcRenderer.invoke("updater:check"),
+    // 下载更新
+    download: () => ipcRenderer.invoke("updater:download"),
+    // 安装更新并重启
+    install: () => ipcRenderer.invoke("updater:install"),
+    // 获取当前状态
+    getStatus: () => ipcRenderer.invoke("updater:getStatus"),
+    // 获取当前应用版本
+    getVersion: () => ipcRenderer.invoke("updater:getVersion"),
+    // 监听更新状态变化
+    onStatusChange: (callback: (status: any) => void) => {
+      const handler = (_event: any, status: any) => callback(status);
+      ipcRenderer.on("updater:status", handler);
+      return () => ipcRenderer.removeListener("updater:status", handler);
+    },
+  },
 });
 
 // TypeScript 类型定义
@@ -127,6 +147,26 @@ declare global {
       shell: {
         openExternal: (url: string) => Promise<{ success: boolean; message?: string }>;
       };
+      updater: {
+        check: () => Promise<UpdateStatus>;
+        download: () => Promise<UpdateStatus>;
+        install: () => void;
+        getStatus: () => Promise<UpdateStatus>;
+        getVersion: () => Promise<string>;
+        onStatusChange: (callback: (status: UpdateStatus) => void) => () => void;
+      };
     };
   }
+}
+
+// 更新状态类型
+interface UpdateStatus {
+  checking: boolean;
+  available: boolean;
+  downloading: boolean;
+  downloaded: boolean;
+  error: string | null;
+  progress: number;
+  version: string | null;
+  releaseNotes: string | null;
 }

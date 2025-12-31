@@ -108,8 +108,10 @@ linux:
       arch:
         - x64
 
-# 发布配置（可选，用于自动更新）
-# publish:
-#   provider: github
-#   owner: your-username
-#   repo: your-repo
+# 发布配置 - 用于自动更新
+publish:
+  provider: github
+  owner: ZeroHawkeye
+  repo: PenBridge
+  # 发布到 GitHub Releases
+  releaseType: release

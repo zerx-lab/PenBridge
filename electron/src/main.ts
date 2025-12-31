@@ -3,6 +3,7 @@ import * as path from "path";
 import { TencentAuth } from "./auth/tencentAuth";
 import { JuejinAuth } from "./auth/juejinAuth";
 import { createStore } from "./store";
+import { initAutoUpdater } from "./autoUpdater";
 
 // 存储实例
 const store = createStore();
@@ -354,6 +355,11 @@ app.whenReady().then(() => {
   registerIpcHandlers();
   createMainWindow();
   setupWindowEvents();
+
+  // 初始化自动更新（仅在主窗口创建后）
+  if (mainWindow) {
+    initAutoUpdater(mainWindow);
+  }
 
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) {

@@ -275,6 +275,8 @@ jobs:
       - name: Package for Windows (NSIS installer)
         run: npm run dist:win
         working-directory: electron
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Upload Windows artifacts
         uses: actions/upload-artifact@v4
@@ -283,6 +285,8 @@ jobs:
           path: |
             electron/release/*.exe
             electron/release/*.zip
+            electron/release/*.yml
+            electron/release/*.yaml
           retention-days: 7
 
   # Linux 构建
@@ -521,3 +525,6 @@ jobs:
             artifacts/**/*.deb
             artifacts/**/*.rpm
             artifacts/**/*.AppImage
+            artifacts/**/*.yml
+            artifacts/**/*.yaml
+            artifacts/**/*.blockmap
