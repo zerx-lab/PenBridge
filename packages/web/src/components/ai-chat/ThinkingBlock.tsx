@@ -3,7 +3,7 @@
  * Cline 风格 - 独立的可折叠思考块
  */
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { ChevronDown, ChevronRight, Sparkles, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -21,6 +21,7 @@ export function ThinkingBlock({
   className 
 }: ThinkingBlockProps) {
   const [isExpanded, setIsExpanded] = useState(defaultExpanded);
+  const contentRef = useRef<HTMLDivElement>(null);
   
   // 流式输出时自动展开
   useEffect(() => {
@@ -28,6 +29,13 @@ export function ThinkingBlock({
       setIsExpanded(true);
     }
   }, [isStreaming, content]);
+  
+  // 流式输出时自动滚动到底部
+  useEffect(() => {
+    if (isStreaming && isExpanded && contentRef.current) {
+      contentRef.current.scrollTop = contentRef.current.scrollHeight;
+    }
+  }, [content, isStreaming, isExpanded]);
   
   if (!content && !isStreaming) return null;
   
@@ -72,7 +80,10 @@ export function ThinkingBlock({
       {/* 内容区域 */}
       {isExpanded && (
         <div className="px-3 pb-2 pt-0">
-          <div className="text-xs text-amber-900/80 dark:text-amber-100/80 whitespace-pre-wrap leading-relaxed font-mono bg-amber-100/30 dark:bg-amber-900/20 rounded p-2 max-h-[300px] overflow-y-auto">
+          <div 
+            ref={contentRef}
+            className="text-xs text-amber-900/80 dark:text-amber-100/80 whitespace-pre-wrap leading-relaxed font-mono bg-amber-100/30 dark:bg-amber-900/20 rounded p-2 max-h-[300px] overflow-y-auto"
+          >
             {content || (isStreaming ? "正在思考..." : "")}
             {isStreaming && (
               <span className="inline-block w-1.5 h-3 bg-amber-500 animate-pulse ml-0.5 align-middle" />

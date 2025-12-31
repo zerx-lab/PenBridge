@@ -20,6 +20,7 @@ import type {
 import { executeToolCalls, applyPendingChange } from "../tools/frontendTools";
 
 const DEFAULT_MAX_LOOP_COUNT = 20;
+const SELECTED_MODEL_KEY = "editor-ai-selected-model-preference";
 
 interface UseAIChatOptions {
   articleId?: number;
@@ -91,18 +92,49 @@ export function useAIChat(options: UseAIChatOptions): UseAIChatReturn {
         });
       setAvailableModels(modelList);
       
-      // 设置默认模型
-      if (!selectedModel && defaultModel) {
-        const defaultModelInfo = modelList.find(
-          (m: AIModelInfo) => m.modelId === defaultModel.model.modelId && 
-               m.providerId === defaultModel.provider.id
-        );
-        if (defaultModelInfo) {
-          setSelectedModel(defaultModelInfo);
+      // 尝试从 localStorage 恢复用户之前选择的模型
+      if (!selectedModel) {
+        const savedModelStr = localStorage.getItem(SELECTED_MODEL_KEY);
+        if (savedModelStr) {
+          try {
+            const savedModel = JSON.parse(savedModelStr);
+            // 验证保存的模型是否仍然可用
+            const matchedModel = modelList.find(
+              (m: AIModelInfo) => m.modelId === savedModel.modelId && 
+                   m.providerId === savedModel.providerId
+            );
+            if (matchedModel) {
+              setSelectedModel(matchedModel);
+              return; // 已恢复用户选择的模型，不再使用默认模型
+            }
+          } catch {
+            // 解析失败，忽略保存的值
+          }
+        }
+        
+        // 如果没有保存的模型或保存的模型不可用，使用服务器默认模型
+        if (defaultModel) {
+          const defaultModelInfo = modelList.find(
+            (m: AIModelInfo) => m.modelId === defaultModel.model.modelId && 
+                 m.providerId === defaultModel.provider.id
+          );
+          if (defaultModelInfo) {
+            setSelectedModel(defaultModelInfo);
+          }
         }
       }
     }
   }, [providers, models, defaultModel, selectedModel]);
+  
+  // 保存用户选择的模型到 localStorage
+  useEffect(() => {
+    if (selectedModel) {
+      localStorage.setItem(SELECTED_MODEL_KEY, JSON.stringify({
+        modelId: selectedModel.modelId,
+        providerId: selectedModel.providerId,
+      }));
+    }
+  }, [selectedModel]);
   
   // 加载会话消息
   useEffect(() => {
@@ -180,6 +212,8 @@ export function useAIChat(options: UseAIChatOptions): UseAIChatReturn {
     messageHistory: Array<{ role: string; content: string }>,
     loopCount: number = 0
   ): Promise<void> => {
+    console.log(`[AI Loop] sendMessageToAPI 开始, loopCount=${loopCount}, messageHistory.length=${messageHistory.length}`);
+    
     if (!selectedModel) {
       setError("请先选择 AI 模型");
       return;
@@ -243,22 +277,31 @@ export function useAIChat(options: UseAIChatOptions): UseAIChatReturn {
       let toolCalls: ToolCallRecord[] = [];
       
       // 创建临时消息 ID
-      const tempMessageId = `temp_${Date.now()}`;
+      const tempMessageId = `temp_${Date.now()}_loop${loopCount}`;
       currentMessageIdRef.current = tempMessageId;
+      console.log(`[AI Loop] 创建临时消息, tempMessageId=${tempMessageId}, loopCount=${loopCount}`);
       
       // 添加临时助手消息
-      setMessages(prev => [...prev, {
-        id: tempMessageId,
-        role: "assistant",
-        content: "",
-        status: "streaming",
-        createdAt: new Date().toISOString(),
-      }]);
+      setMessages(prev => {
+        console.log(`[AI Loop] 添加临时消息前, prev.length=${prev.length}, loopCount=${loopCount}`);
+        const newMessages = [...prev, {
+          id: tempMessageId,
+          role: "assistant" as const,
+          content: "",
+          status: "streaming" as const,
+          createdAt: new Date().toISOString(),
+        }];
+        console.log(`[AI Loop] 添加临时消息后, newMessages.length=${newMessages.length}`);
+        return newMessages;
+      });
       
       setIsStreaming(true);
       
       // SSE 解析：需要同时解析 event: 和 data: 行
       let currentEventType = "";
+      // 节流：工具参数更新的最小间隔（毫秒）
+      let lastArgsUpdateTime = 0;
+      const ARGS_UPDATE_THROTTLE = 100; // 每 100ms 最多更新一次，提供更流畅的体验
       
       while (true) {
         const { done, value } = await reader.read();
@@ -330,8 +373,59 @@ export function useAIChat(options: UseAIChatOptions): UseAIChatReturn {
                 }
                 break;
                 
+              case "tool_call_start":
+                // 工具调用开始（实时显示，让用户尽早知道 AI 要调用工具）
+                console.log(`[AI Loop] tool_call_start 收到, loopCount=${loopCount}, name=${data.name}, tempMessageId=${tempMessageId}`);
+                if (data.name) {
+                  const newToolCall: ToolCallRecord = {
+                    id: data.id || `call_${data.index}`,
+                    type: "function" as const,
+                    name: data.name,
+                    arguments: "",
+                    status: "pending" as const,
+                    executionLocation: data.executionLocation,
+                    isStreamingArguments: true,
+                    argumentsLength: 0,
+                  };
+                  
+                  // 检查是否已存在（避免重复添加）
+                  const existingIndex = toolCalls.findIndex(tc => tc.id === newToolCall.id);
+                  if (existingIndex === -1) {
+                    toolCalls.push(newToolCall);
+                  }
+                  
+                  setMessages(prev => prev.map(m => 
+                    m.id === tempMessageId 
+                      ? { ...m, toolCalls: [...toolCalls] }
+                      : m
+                  ));
+                }
+                break;
+              
+              case "tool_call_arguments":
+                // 工具参数增量（实时显示参数生成进度）
+                if (data.index !== undefined && data.index < toolCalls.length) {
+                  // 累积参数增量到 arguments 字段
+                  if (data.argumentsDelta) {
+                    toolCalls[data.index].arguments = (toolCalls[data.index].arguments || "") + data.argumentsDelta;
+                  }
+                  toolCalls[data.index].argumentsLength = data.argumentsLength || toolCalls[data.index].arguments?.length || 0;
+                  
+                  // 节流：每 100ms 最多更新一次 UI（降低节流时间以获得更流畅的体验）
+                  const now = Date.now();
+                  if (now - lastArgsUpdateTime >= ARGS_UPDATE_THROTTLE) {
+                    lastArgsUpdateTime = now;
+                    setMessages(prev => prev.map(m => 
+                      m.id === tempMessageId 
+                        ? { ...m, toolCalls: [...toolCalls] }
+                        : m
+                    ));
+                  }
+                }
+                break;
+                
               case "tool_calls":
-                // 工具调用
+                // 工具调用完整信息（流结束时发送，包含完整参数）
                 if (data.toolCalls) {
                   toolCalls = data.toolCalls.map((tc: any) => ({
                     id: tc.id,
@@ -340,6 +434,8 @@ export function useAIChat(options: UseAIChatOptions): UseAIChatReturn {
                     arguments: tc.function.arguments,
                     status: "pending" as const,
                     executionLocation: tc.executionLocation,
+                    isStreamingArguments: false,
+                    argumentsLength: tc.function.arguments?.length || 0,
                   }));
                   
                   setMessages(prev => prev.map(m => 
@@ -429,6 +525,7 @@ export function useAIChat(options: UseAIChatOptions): UseAIChatReturn {
       }
       
       setIsStreaming(false);
+      console.log(`[AI Loop] 流结束, loopCount=${loopCount}, toolCalls.length=${toolCalls.length}, tempMessageId=${tempMessageId}`);
       
       // 如果有工具调用，执行工具并继续对话
       if (toolCalls.length > 0) {
@@ -547,7 +644,9 @@ export function useAIChat(options: UseAIChatOptions): UseAIChatReturn {
         ];
         
         // 递归调用继续对话
+        console.log(`[AI Loop] 准备递归调用, 当前 loopCount=${loopCount}, 下一轮=${loopCount + 1}`);
         await sendMessageToAPI(newHistory, loopCount + 1);
+        console.log(`[AI Loop] 递归调用返回, loopCount=${loopCount}`);
       } else {
         // 保存消息到数据库
         if (session) {
@@ -581,6 +680,7 @@ export function useAIChat(options: UseAIChatOptions): UseAIChatReturn {
         ));
       }
     } finally {
+      console.log(`[AI Loop] finally 块执行, loopCount=${loopCount}`);
       setIsStreaming(false);
       setIsLoading(false);
       abortControllerRef.current = null;

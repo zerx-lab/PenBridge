@@ -137,8 +137,9 @@ const TOC_MIN_WIDTH = 150;
 const TOC_MAX_WIDTH = 400;
 const TOC_DEFAULT_WIDTH = 200;
 
-// AI 面板宽度设置
+// AI 面板设置
 const AI_PANEL_WIDTH_KEY = "editor-ai-panel-width-preference";
+const AI_PANEL_OPEN_KEY = "editor-ai-panel-open-preference";
 const AI_PANEL_DEFAULT_WIDTH = 400;
 
 export interface ArticleEditorLayoutProps {
@@ -219,7 +220,10 @@ export function ArticleEditorLayout({
   const [isDragging, setIsDragging] = useState(false);
   
   // AI 聊天面板状态
-  const [isAIPanelOpen, setIsAIPanelOpen] = useState(false);
+  const [isAIPanelOpen, setIsAIPanelOpen] = useState(() => {
+    const saved = localStorage.getItem(AI_PANEL_OPEN_KEY);
+    return saved === "true";
+  });
   const [aiPanelWidth, setAIPanelWidth] = useState(() => {
     const saved = localStorage.getItem(AI_PANEL_WIDTH_KEY);
     return saved ? parseInt(saved, 10) : AI_PANEL_DEFAULT_WIDTH;
@@ -279,7 +283,11 @@ export function ArticleEditorLayout({
     localStorage.setItem(TOC_WIDTH_KEY, String(tocWidth));
   }, [tocWidth]);
   
-  // 保存 AI 面板宽度
+  // 保存 AI 面板状态
+  useEffect(() => {
+    localStorage.setItem(AI_PANEL_OPEN_KEY, String(isAIPanelOpen));
+  }, [isAIPanelOpen]);
+  
   useEffect(() => {
     localStorage.setItem(AI_PANEL_WIDTH_KEY, String(aiPanelWidth));
   }, [aiPanelWidth]);

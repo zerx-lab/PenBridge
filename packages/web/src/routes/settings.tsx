@@ -1,7 +1,7 @@
 import { createFileRoute, useNavigate, useSearch } from "@tanstack/react-router";
 import { useState, useEffect } from "react";
 import { z } from "zod";
-import { User, Cloud, Info, LogOut, LogIn, RefreshCw, Mail, Calendar, Trash2, Eye, EyeOff, Send, CheckCircle, XCircle, Clock, Loader2, Users, Plus, Pencil, Key, Shield, ShieldCheck, Server, PenLine, Sparkles, Bot } from "lucide-react";
+import { User, Cloud, Info, LogOut, LogIn, RefreshCw, Mail, Calendar, Trash2, Eye, EyeOff, Send, CheckCircle, XCircle, Clock, Loader2, Users, Plus, Pencil, Key, Shield, ShieldCheck, Server, PenLine, Sparkles, Bot, Type, RotateCcw } from "lucide-react";
 import { isSuperAdmin, getAuthUser, getAuthToken, AdminRole } from "@/utils/auth";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -53,6 +53,15 @@ import {
   getCustomDictionary,
   removeFromCustomDictionary,
 } from "@/utils/spellCheck";
+import {
+  getSavedFontFamily,
+  setFontFamily,
+  resetFontFamily,
+  getSystemFonts,
+  isLocalFontsApiSupported,
+  PRESET_FONTS,
+  DEFAULT_FONT_FAMILY,
+} from "@/utils/fontSettings";
 
 // 菜单项类型
 type MenuItem = {
@@ -1895,6 +1904,29 @@ function ServerConfigSettings() {
 function EditorSettings() {
   const [spellCheckEnabled, setSpellCheckEnabledState] = useState(() => isSpellCheckEnabled());
   const [customWords, setCustomWords] = useState<string[]>(() => getCustomDictionary());
+  
+  // 字体设置状态
+  const [currentFont, setCurrentFont] = useState(() => getSavedFontFamily());
+  const [systemFonts, setSystemFonts] = useState<string[]>([]);
+  const [loadingSystemFonts, setLoadingSystemFonts] = useState(false);
+  const [showSystemFonts, setShowSystemFonts] = useState(false);
+
+  // 加载系统字体
+  useEffect(() => {
+    if (showSystemFonts && systemFonts.length === 0) {
+      setLoadingSystemFonts(true);
+      getSystemFonts()
+        .then((fonts) => {
+          setSystemFonts(fonts);
+        })
+        .catch((err) => {
+          console.error("获取系统字体失败:", err);
+        })
+        .finally(() => {
+          setLoadingSystemFonts(false);
+        });
+    }
+  }, [showSystemFonts, systemFonts.length]);
 
   const handleSpellCheckToggle = (checked: boolean) => {
     setSpellCheckEnabled(checked);
@@ -1913,6 +1945,25 @@ function EditorSettings() {
     message.success(`已从单词本移除: ${word}`);
   };
 
+  const handleFontChange = (fontFamily: string) => {
+    setFontFamily(fontFamily);
+    setCurrentFont(fontFamily);
+    message.success("字体已更新");
+  };
+
+  const handleResetFont = () => {
+    resetFontFamily();
+    setCurrentFont(DEFAULT_FONT_FAMILY);
+    message.success("已恢复默认字体");
+  };
+
+  // 判断当前字体是否为预设字体
+  const isPresetFont = PRESET_FONTS.some((f) => f.value === currentFont);
+  // 如果不是预设字体，显示为自定义字体
+  const currentFontDisplay = isPresetFont
+    ? PRESET_FONTS.find((f) => f.value === currentFont)?.name || "系统默认"
+    : currentFont.split(",")[0].replace(/"/g, "").trim();
+
   return (
     <div className="space-y-6">
       <div>
@@ -1921,6 +1972,110 @@ function EditorSettings() {
           自定义编辑器的行为和功能
         </p>
       </div>
+
+      {/* 字体设置 */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base flex items-center gap-2">
+            <Type className="h-4 w-4" />
+            全局字体
+          </CardTitle>
+          <CardDescription>
+            选择应用的显示字体，更改后立即生效
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {/* 当前字体预览 */}
+          <div className="p-4 border rounded-lg bg-muted/30">
+            <p className="text-sm text-muted-foreground mb-2">当前字体预览：</p>
+            <p style={{ fontFamily: currentFont }} className="text-lg">
+              你好世界 Hello World 1234567890
+            </p>
+            <p style={{ fontFamily: currentFont }} className="text-sm text-muted-foreground mt-1">
+              当前使用：{currentFontDisplay}
+            </p>
+          </div>
+
+          {/* 预设字体选择 */}
+          <div className="space-y-2">
+            <Label>预设字体</Label>
+            <Select
+              value={isPresetFont ? currentFont : ""}
+              onValueChange={handleFontChange}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="选择预设字体" />
+              </SelectTrigger>
+              <SelectContent>
+                {PRESET_FONTS.map((font) => (
+                  <SelectItem key={font.name} value={font.value}>
+                    <span style={{ fontFamily: font.value }}>{font.name}</span>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* 系统字体选择（需要浏览器支持 Local Fonts API） */}
+          {isLocalFontsApiSupported() && (
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <Label>系统字体</Label>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setShowSystemFonts(!showSystemFonts)}
+                >
+                  {showSystemFonts ? "收起" : "展开更多系统字体"}
+                </Button>
+              </div>
+              
+              {showSystemFonts && (
+                <div className="border rounded-lg p-3 max-h-60 overflow-y-auto">
+                  {loadingSystemFonts ? (
+                    <div className="flex items-center justify-center py-4">
+                      <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                      <span className="text-sm text-muted-foreground">正在加载系统字体...</span>
+                    </div>
+                  ) : systemFonts.length === 0 ? (
+                    <p className="text-sm text-muted-foreground text-center py-4">
+                      无法获取系统字体，请授权访问或使用预设字体
+                    </p>
+                  ) : (
+                    <div className="grid grid-cols-2 gap-2">
+                      {systemFonts.map((fontName) => (
+                        <Button
+                          key={fontName}
+                          variant={currentFont.includes(fontName) ? "secondary" : "ghost"}
+                          size="sm"
+                          className="justify-start text-left truncate"
+                          style={{ fontFamily: fontName }}
+                          onClick={() => handleFontChange(`"${fontName}", sans-serif`)}
+                        >
+                          {fontName}
+                        </Button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* 重置按钮 */}
+          <div className="flex justify-end">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleResetFont}
+              disabled={currentFont === DEFAULT_FONT_FAMILY}
+            >
+              <RotateCcw className="h-4 w-4 mr-2" />
+              恢复默认字体
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* 拼写检查开关 */}
       <Card>
@@ -2000,6 +2155,7 @@ function AIConfigSettings() {
     name: "",
     baseUrl: "",
     apiKey: "",
+    apiType: "openai" as "openai" | "zhipu",
   });
 
   // 模型表单状态
@@ -2144,7 +2300,7 @@ function AIConfigSettings() {
   // 测试连接（不再使用 tRPC mutation）
 
   const resetProviderForm = () => {
-    setProviderForm({ name: "", baseUrl: "", apiKey: "" });
+    setProviderForm({ name: "", baseUrl: "", apiKey: "", apiType: "openai" });
     setShowApiKey(false);
   };
 
@@ -2188,6 +2344,7 @@ function AIConfigSettings() {
       name: provider.name,
       baseUrl: provider.baseUrl,
       apiKey: provider.apiKey,
+      apiType: provider.apiType || "openai",
     });
     setShowProviderDialog(true);
   };
@@ -2589,6 +2746,26 @@ function AIConfigSettings() {
                       </Button>
                     </div>
                   </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="provider-apiType">API 类型</Label>
+                    <Select
+                      value={providerForm.apiType}
+                      onValueChange={(value: "openai" | "zhipu") => setProviderForm({ ...providerForm, apiType: value })}
+                    >
+                      <SelectTrigger id="provider-apiType">
+                        <SelectValue placeholder="选择 API 类型" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="openai">OpenAI 兼容</SelectItem>
+                        <SelectItem value="zhipu">智谱 AI</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-muted-foreground">
+                      {providerForm.apiType === "zhipu" 
+                        ? "智谱 AI 使用特殊的 tool_stream 格式进行流式工具调用"
+                        : "标准 OpenAI 格式，适用于 OpenAI、Claude、通义千问等大多数服务商"}
+                    </p>
+                  </div>
                 </div>
                 <DialogFooter>
                   <Button
@@ -2612,6 +2789,7 @@ function AIConfigSettings() {
                 <TableRow>
                   <TableHead>名称</TableHead>
                   <TableHead>API 地址</TableHead>
+                  <TableHead>类型</TableHead>
                   <TableHead>状态</TableHead>
                   <TableHead className="text-right">操作</TableHead>
                 </TableRow>
@@ -2622,6 +2800,11 @@ function AIConfigSettings() {
                     <TableCell className="font-medium">{provider.name}</TableCell>
                     <TableCell className="text-muted-foreground text-sm max-w-[200px] truncate">
                       {provider.baseUrl}
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant="outline" className="text-xs">
+                        {provider.apiType === "zhipu" ? "智谱" : "OpenAI"}
+                      </Badge>
                     </TableCell>
                     <TableCell>
                       {provider.enabled ? (

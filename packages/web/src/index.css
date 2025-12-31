@@ -1,5 +1,6 @@
 @import "tailwindcss";
 @import "tw-animate-css";
+@plugin "@tailwindcss/typography";
 
 @custom-variant dark (&:is(.dark *));
 
@@ -52,9 +53,12 @@
   }
   body {
     @apply bg-background text-foreground;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
-      "Helvetica Neue", Arial, sans-serif;
   }
+}
+
+/* 根元素和 body 设置字体变量（由 fontSettings.ts 动态覆盖） */
+html {
+  font-family: var(--app-font-family, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif);
 }
 
 html, body {
@@ -118,6 +122,8 @@ html, body {
 
 :root {
   --radius: 0.375rem;
+  /* 全局字体变量 - 由 fontSettings.ts 动态设置 */
+  --app-font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   --background: oklch(1 0 0);
   --foreground: oklch(0.145 0 0);
   --card: oklch(1 0 0);
@@ -403,6 +409,570 @@ a .text-foreground,
   }
   100% {
     background-color: transparent;
+  }
+}
+
+/* ==================== 代码块美化 - Notion 风格 + VSCode Light 主题 ==================== */
+
+/* 代码块容器样式 - Notion 风格：简洁无边框 */
+.milkdown-editor .milkdown-code-block {
+  position: relative;
+  background-color: #f7f6f3;
+  border: none;
+  border-radius: 4px;
+  margin: 8px 0;
+  overflow: hidden;
+}
+
+/* 工具栏 - 始终显示，Notion 风格 */
+.milkdown-editor .milkdown-code-block .tools {
+  display: flex !important;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 12px;
+  background-color: transparent;
+  border-bottom: none;
+  opacity: 1 !important;
+  visibility: visible !important;
+}
+
+/* 语言按钮 - Notion 风格：简洁文字 */
+.milkdown-editor .milkdown-code-block .language-button {
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  font-size: 12px;
+  font-weight: 400;
+  color: #9b9a97;
+  background-color: transparent;
+  border: none;
+  border-radius: 3px;
+  padding: 2px 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  opacity: 1 !important;
+  visibility: visible !important;
+  display: flex !important;
+  align-items: center;
+  gap: 2px;
+}
+
+.milkdown-editor .milkdown-code-block .language-button:hover {
+  background-color: rgba(55, 53, 47, 0.08);
+  color: #37352f;
+}
+
+/* 语言选择器下拉图标 */
+.milkdown-editor .milkdown-code-block .language-button .expand-icon {
+  opacity: 0.5;
+}
+
+/* 工具按钮组 - 始终显示 */
+.milkdown-editor .milkdown-code-block .tools-button-group {
+  display: flex !important;
+  align-items: center;
+  gap: 4px;
+  opacity: 1 !important;
+  visibility: visible !important;
+}
+
+/* 复制按钮 - Notion 风格 */
+.milkdown-editor .milkdown-code-block .copy-button {
+  display: flex !important;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 2px 8px;
+  background-color: transparent;
+  border: none;
+  border-radius: 3px;
+  cursor: pointer;
+  color: #9b9a97;
+  font-size: 12px;
+  font-weight: 400;
+  transition: all 0.15s ease;
+  opacity: 1 !important;
+  visibility: visible !important;
+}
+
+.milkdown-editor .milkdown-code-block .copy-button:hover {
+  background-color: rgba(55, 53, 47, 0.08);
+  color: #37352f;
+}
+
+/* 复制按钮图标 */
+.milkdown-editor .milkdown-code-block .copy-button .milkdown-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.milkdown-editor .milkdown-code-block .copy-button .milkdown-icon svg {
+  width: 14px;
+  height: 14px;
+  fill: currentColor;
+}
+
+/* 复制成功状态 */
+.milkdown-editor .milkdown-code-block .copy-button.copied,
+.milkdown-editor .milkdown-code-block .copy-button[data-copied="true"] {
+  background-color: rgba(46, 170, 79, 0.15) !important;
+  color: #2eaa4f !important;
+  transition: all 0.2s ease;
+}
+
+/* 复制成功时的图标变绿 */
+.milkdown-editor .milkdown-code-block .copy-button.copied .milkdown-icon svg path,
+.milkdown-editor .milkdown-code-block .copy-button[data-copied="true"] .milkdown-icon svg path {
+  fill: #2eaa4f;
+}
+
+/* CodeMirror 编辑器区域 */
+.milkdown-editor .cm-editor {
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace !important;
+  font-size: 14px;
+  line-height: 1.5;
+  background-color: transparent !important;
+}
+
+/* CodeMirror 内容区域 - 去掉内部圆角 */
+.milkdown-editor .milkdown-code-block .codemirror-host {
+  background-color: transparent;
+}
+
+.milkdown-editor .cm-content {
+  padding: 0 12px 12px 12px !important;
+}
+
+.milkdown-editor .cm-line {
+  padding: 0 4px;
+  border-radius: 0 !important;
+}
+
+/* 行号样式 - Notion 风格 */
+.milkdown-editor .cm-gutters {
+  background-color: transparent !important;
+  border-right: none !important;
+  color: #9b9a97 !important;
+  padding-left: 8px;
+}
+
+/* 移除行号区域的边框 */
+.milkdown-editor .cm-gutter {
+  border: none !important;
+}
+
+.milkdown-editor .cm-lineNumbers .cm-gutterElement {
+  padding: 0 8px 0 4px;
+  min-width: 32px;
+  font-size: 12px;
+  text-align: right;
+}
+
+/* 激活行高亮 - Notion 风格：淡淡的高亮 */
+.milkdown-editor .cm-activeLine {
+  background-color: rgba(55, 53, 47, 0.04) !important;
+  border-radius: 0 !important;
+}
+
+.milkdown-editor .cm-activeLineGutter {
+  background-color: transparent !important;
+}
+
+/* 选中文本 */
+.milkdown-editor .cm-selectionBackground {
+  background-color: #add6ff !important;
+}
+
+.milkdown-editor .cm-focused .cm-selectionBackground {
+  background-color: #add6ff !important;
+}
+
+/* 光标 */
+.milkdown-editor .cm-cursor {
+  border-left-color: #000 !important;
+}
+
+/* ==================== VSCode Light 语法高亮主题 ==================== */
+
+/* 注释 - 绿色 */
+.milkdown-editor .cm-editor .tok-comment,
+.milkdown-editor .cm-editor .ͼc {
+  color: #008000 !important;
+  font-style: italic;
+}
+
+/* 关键字 - 蓝色 */
+.milkdown-editor .cm-editor .tok-keyword,
+.milkdown-editor .cm-editor .ͼd {
+  color: #0000ff !important;
+  font-weight: 500;
+}
+
+/* 字符串 - 棕红色 */
+.milkdown-editor .cm-editor .tok-string,
+.milkdown-editor .cm-editor .ͼ7 {
+  color: #a31515 !important;
+}
+
+/* 数字 - 深绿色 */
+.milkdown-editor .cm-editor .tok-number,
+.milkdown-editor .cm-editor .ͼe {
+  color: #098658 !important;
+}
+
+/* 变量名 - 深蓝色 */
+.milkdown-editor .cm-editor .tok-variableName,
+.milkdown-editor .cm-editor .ͼb {
+  color: #001080 !important;
+}
+
+/* 类型名 - 青绿色 */
+.milkdown-editor .cm-editor .tok-typeName,
+.milkdown-editor .cm-editor .ͼ14 {
+  color: #267f99 !important;
+}
+
+/* 函数名 - 暗黄色 */
+.milkdown-editor .cm-editor .tok-function,
+.milkdown-editor .cm-editor .tok-propertyName,
+.milkdown-editor .cm-editor .ͼf {
+  color: #795e26 !important;
+}
+
+/* 操作符 - 黑色 */
+.milkdown-editor .cm-editor .tok-operator,
+.milkdown-editor .cm-editor .ͼ8 {
+  color: #000000 !important;
+}
+
+/* 标点符号 - 深灰 */
+.milkdown-editor .cm-editor .tok-punctuation,
+.milkdown-editor .cm-editor .ͼ9 {
+  color: #393a34 !important;
+}
+
+/* 属性 - 红色 */
+.milkdown-editor .cm-editor .tok-attributeName {
+  color: #e50000 !important;
+}
+
+/* 标签名 - 蓝色 */
+.milkdown-editor .cm-editor .tok-tagName,
+.milkdown-editor .cm-editor .ͼ10 {
+  color: #800000 !important;
+}
+
+/* 定义 - 紫色 */
+.milkdown-editor .cm-editor .tok-definition,
+.milkdown-editor .cm-editor .ͼ11 {
+  color: #0070c1 !important;
+}
+
+/* 布尔值 - 蓝色 */
+.milkdown-editor .cm-editor .tok-bool,
+.milkdown-editor .cm-editor .ͼ12 {
+  color: #0000ff !important;
+}
+
+/* 正则表达式 - 红色 */
+.milkdown-editor .cm-editor .tok-regexp {
+  color: #811f3f !important;
+}
+
+/* 类名 - 青色 */
+.milkdown-editor .cm-editor .tok-className {
+  color: #267f99 !important;
+}
+
+/* 标签属性值 - 蓝色 */
+.milkdown-editor .cm-editor .tok-attributeValue {
+  color: #0000ff !important;
+}
+
+/* meta 信息 */
+.milkdown-editor .cm-editor .tok-meta {
+  color: #267f99 !important;
+}
+
+/* 自定义类 - 加强 tok 覆盖 */
+.milkdown-editor .cm-editor .ͼ1 { color: #393a34 !important; } /* 默认文本 */
+.milkdown-editor .cm-editor .ͼ2 { color: #393a34 !important; } /* 默认文本 */
+.milkdown-editor .cm-editor .ͼ3 { color: #0000ff !important; } /* 关键字 */
+.milkdown-editor .cm-editor .ͼ4 { color: #0000ff !important; } /* 关键字 */
+.milkdown-editor .cm-editor .ͼ5 { color: #267f99 !important; } /* 类型 */
+.milkdown-editor .cm-editor .ͼ6 { color: #267f99 !important; } /* 类型 */
+
+/* ==================== 暗色模式代码块样式 - Notion Dark 风格 ==================== */
+.dark .milkdown-editor .milkdown-code-block {
+  background-color: #2f2f2f;
+  border: none;
+}
+
+.dark .milkdown-editor .milkdown-code-block .tools {
+  background-color: transparent;
+  border-bottom: none;
+}
+
+.dark .milkdown-editor .milkdown-code-block .language-button {
+  color: rgba(255, 255, 255, 0.5);
+  background-color: transparent;
+}
+
+.dark .milkdown-editor .milkdown-code-block .language-button:hover {
+  background-color: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.dark .milkdown-editor .milkdown-code-block .copy-button {
+  background-color: transparent;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.dark .milkdown-editor .milkdown-code-block .copy-button:hover {
+  background-color: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.dark .milkdown-editor .milkdown-code-block .copy-button.copied,
+.dark .milkdown-editor .milkdown-code-block .copy-button[data-copied="true"] {
+  background-color: rgba(46, 170, 79, 0.2);
+  color: #4ade80;
+}
+
+.dark .milkdown-editor .cm-editor {
+  background-color: transparent !important;
+}
+
+.dark .milkdown-editor .cm-gutters {
+  background-color: transparent !important;
+  border-right: none !important;
+  color: rgba(255, 255, 255, 0.4) !important;
+}
+
+.dark .milkdown-editor .cm-activeLine {
+  background-color: rgba(255, 255, 255, 0.05) !important;
+}
+
+.dark .milkdown-editor .cm-selectionBackground {
+  background-color: rgba(59, 130, 246, 0.3) !important;
+}
+
+.dark .milkdown-editor .cm-cursor {
+  border-left-color: #fff !important;
+}
+
+/* VSCode Dark 语法高亮 */
+.dark .milkdown-editor .cm-editor .tok-comment,
+.dark .milkdown-editor .cm-editor .ͼc {
+  color: #6a9955 !important;
+}
+
+.dark .milkdown-editor .cm-editor .tok-keyword,
+.dark .milkdown-editor .cm-editor .ͼd,
+.dark .milkdown-editor .cm-editor .ͼ3,
+.dark .milkdown-editor .cm-editor .ͼ4 {
+  color: #569cd6 !important;
+}
+
+.dark .milkdown-editor .cm-editor .tok-string,
+.dark .milkdown-editor .cm-editor .ͼ7 {
+  color: #ce9178 !important;
+}
+
+.dark .milkdown-editor .cm-editor .tok-number,
+.dark .milkdown-editor .cm-editor .ͼe {
+  color: #b5cea8 !important;
+}
+
+.dark .milkdown-editor .cm-editor .tok-variableName,
+.dark .milkdown-editor .cm-editor .ͼb {
+  color: #9cdcfe !important;
+}
+
+.dark .milkdown-editor .cm-editor .tok-typeName,
+.dark .milkdown-editor .cm-editor .ͼ14,
+.dark .milkdown-editor .cm-editor .ͼ5,
+.dark .milkdown-editor .cm-editor .ͼ6 {
+  color: #4ec9b0 !important;
+}
+
+.dark .milkdown-editor .cm-editor .tok-function,
+.dark .milkdown-editor .cm-editor .tok-propertyName,
+.dark .milkdown-editor .cm-editor .ͼf {
+  color: #dcdcaa !important;
+}
+
+.dark .milkdown-editor .cm-editor .tok-operator,
+.dark .milkdown-editor .cm-editor .ͼ8 {
+  color: #d4d4d4 !important;
+}
+
+.dark .milkdown-editor .cm-editor .tok-punctuation,
+.dark .milkdown-editor .cm-editor .ͼ9 {
+  color: #d4d4d4 !important;
+}
+
+.dark .milkdown-editor .cm-editor .tok-tagName,
+.dark .milkdown-editor .cm-editor .ͼ10 {
+  color: #569cd6 !important;
+}
+
+.dark .milkdown-editor .cm-editor .tok-definition,
+.dark .milkdown-editor .cm-editor .ͼ11 {
+  color: #4fc1ff !important;
+}
+
+.dark .milkdown-editor .cm-editor .tok-bool,
+.dark .milkdown-editor .cm-editor .ͼ12 {
+  color: #569cd6 !important;
+}
+
+.dark .milkdown-editor .cm-editor .ͼ1,
+.dark .milkdown-editor .cm-editor .ͼ2 {
+  color: #d4d4d4 !important;
+}
+
+/* AI Chat 面板 Markdown 样式 */
+.ai-chat-markdown {
+  /* 基础样式 */
+  & p {
+    margin: 0.5em 0;
+  }
+  
+  & p:first-child {
+    margin-top: 0;
+  }
+  
+  & p:last-child {
+    margin-bottom: 0;
+  }
+  
+  /* 标题样式 */
+  & h1, & h2, & h3, & h4, & h5, & h6 {
+    margin-top: 1em;
+    margin-bottom: 0.5em;
+    font-weight: 600;
+    line-height: 1.3;
+  }
+  
+  & h1 { font-size: 1.25em; }
+  & h2 { font-size: 1.15em; }
+  & h3 { font-size: 1.1em; }
+  & h4, & h5, & h6 { font-size: 1em; }
+  
+  /* 列表样式 */
+  & ul, & ol {
+    margin: 0.5em 0;
+    padding-left: 1.5em;
+  }
+  
+  & li {
+    margin: 0.25em 0;
+  }
+  
+  & ul {
+    list-style-type: disc;
+  }
+  
+  & ol {
+    list-style-type: decimal;
+  }
+  
+  /* 行内代码 */
+  & code:not(pre code) {
+    background-color: var(--muted);
+    color: var(--foreground);
+    padding: 0.15em 0.35em;
+    border-radius: 0.25em;
+    font-size: 0.9em;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  }
+  
+  /* 代码块 */
+  & pre {
+    background-color: var(--muted);
+    border-radius: 0.375rem;
+    padding: 0.75em 1em;
+    margin: 0.75em 0;
+    overflow-x: auto;
+    font-size: 0.85em;
+    line-height: 1.5;
+  }
+  
+  & pre code {
+    background: none;
+    padding: 0;
+    font-size: inherit;
+    color: inherit;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  }
+  
+  /* 引用块 */
+  & blockquote {
+    border-left: 3px solid var(--border);
+    margin: 0.75em 0;
+    padding-left: 1em;
+    color: var(--muted-foreground);
+    font-style: italic;
+  }
+  
+  /* 链接 */
+  & a {
+    color: oklch(0.55 0.2 250);
+    text-decoration: underline;
+    text-underline-offset: 2px;
+  }
+  
+  & a:hover {
+    color: oklch(0.45 0.2 250);
+  }
+  
+  .dark & a {
+    color: oklch(0.7 0.15 250);
+  }
+  
+  .dark & a:hover {
+    color: oklch(0.8 0.15 250);
+  }
+  
+  /* 表格 */
+  & table {
+    border-collapse: collapse;
+    margin: 0.75em 0;
+    width: 100%;
+    font-size: 0.9em;
+  }
+  
+  & th, & td {
+    border: 1px solid var(--border);
+    padding: 0.5em 0.75em;
+    text-align: left;
+  }
+  
+  & th {
+    background-color: var(--muted);
+    font-weight: 600;
+  }
+  
+  /* 水平线 */
+  & hr {
+    border: none;
+    border-top: 1px solid var(--border);
+    margin: 1em 0;
+  }
+  
+  /* 强调文本 */
+  & strong {
+    font-weight: 600;
+  }
+  
+  & em {
+    font-style: italic;
+  }
+  
+  /* 删除线 */
+  & del {
+    text-decoration: line-through;
+    opacity: 0.7;
   }
 }
 

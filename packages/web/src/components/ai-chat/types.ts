@@ -25,12 +25,16 @@ export interface ToolCallRecord {
   arguments: string;
   result?: string;
   status: "pending" | "running" | "completed" | "failed" | "awaiting_confirmation";
-  executionLocation: "frontend" | "backend";
+  executionLocation?: "frontend" | "backend";
   error?: string;
   startedAt?: string;
   completedAt?: string;
   // 待确认的变更
   pendingChange?: PendingChange;
+  // 流式传输状态：参数正在生成中
+  isStreamingArguments?: boolean;
+  // 当前参数长度（用于显示进度）
+  argumentsLength?: number;
 }
 
 // Token 使用统计

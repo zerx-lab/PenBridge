@@ -38,6 +38,12 @@ export class AIProvider {
   @Column({ default: 0 })
   order!: number;
 
+  // API 类型（用于确定流式工具调用的格式）
+  // - openai: 标准 OpenAI 格式，tool call 参数通过 function.arguments 增量传输
+  // - zhipu: 智谱 AI 格式，需要 tool_stream 参数，参数通过 argumentsDelta 增量传输
+  @Column({ default: "openai" })
+  apiType!: "openai" | "zhipu";
+
   @CreateDateColumn()
   createdAt!: Date;
 

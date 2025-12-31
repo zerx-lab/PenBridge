@@ -273,7 +273,7 @@ export function MilkdownEditor({
         });
       });
 
-      createPromise = crepe.create().then(() => {
+createPromise = crepe.create().then(() => {
         // 再次检查组件是否仍然挂载
         if (!isMountedRef.current) {
           return;
@@ -285,6 +285,32 @@ export function MilkdownEditor({
         if (readonly) {
           crepe?.setReadonly(true);
         }
+
+        // 添加代码块复制按钮点击反馈
+        container.addEventListener("click", (e) => {
+          const target = e.target as HTMLElement;
+          const copyButton = target.closest(".copy-button");
+          if (copyButton) {
+            // 添加复制成功的视觉反馈
+            copyButton.classList.add("copied");
+            const textNode = Array.from(copyButton.childNodes).find(
+              (node) => node.nodeType === Node.TEXT_NODE
+            );
+            
+            // 更改文字为 "Copied!"
+            if (textNode) {
+              textNode.textContent = "Copied!";
+            }
+            
+            // 1.5秒后恢复原样
+            setTimeout(() => {
+              copyButton.classList.remove("copied");
+              if (textNode) {
+                textNode.textContent = "Copy";
+              }
+            }, 1500);
+          }
+        });
 
         // 添加拼写检查插件
         if (shouldEnableSpellCheck && crepe) {

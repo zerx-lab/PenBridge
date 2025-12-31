@@ -1712,6 +1712,7 @@ export const appRouter = t.router({
           name: z.string().min(1, "请输入供应商名称"),
           baseUrl: z.string().url("请输入有效的 URL"),
           apiKey: z.string().min(1, "请输入 API Key"),
+          apiType: z.enum(["openai", "zhipu"]).default("openai"),
         })
       )
       .mutation(async ({ input }) => {
@@ -1748,6 +1749,7 @@ export const appRouter = t.router({
           baseUrl: z.string().url().optional(),
           apiKey: z.string().optional(),
           enabled: z.boolean().optional(),
+          apiType: z.enum(["openai", "zhipu"]).optional(),
         })
       )
       .mutation(async ({ input }) => {

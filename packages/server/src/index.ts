@@ -661,6 +661,16 @@ app.post("/api/ai/chat/stream", async (c) => {
       if (tools.length > 0) {
         requestBody.tools = tools;
         requestBody.tool_choice = "auto";
+        
+        // 智谱 AI 特殊支持：启用工具调用流式输出
+        // 根据供应商配置的 apiType 来判断是否启用 tool_stream
+        // 智谱 AI 使用特殊的 tool_stream 格式，参数通过 argumentsDelta 增量传输
+        const isZhipuAI = provider.apiType === "zhipu";
+        if (isZhipuAI && requestBody.stream) {
+          requestBody.tool_stream = true;
+          logStep(`智谱 AI 检测: 已启用 tool_stream`);
+        }
+        
         logStep(`已添加 ${tools.length} 个工具: ${tools.map(t => t.function.name).join(', ')}`);
       }
     } else {
@@ -766,33 +776,101 @@ app.post("/api/ai/chat/stream", async (c) => {
                 
                 // 处理工具调用
                 if (delta.tool_calls) {
-                  logStep(`检测到工具调用: ${JSON.stringify(delta.tool_calls)}`);
                   for (const toolCall of delta.tool_calls) {
                     const index = toolCall.index;
                     
-                    // 新的工具调用
-                    if (index !== undefined && index >= toolCalls.length) {
-                      toolCalls.push({
-                        id: toolCall.id || `call_${index}`,
-                        type: "function",
-                        function: {
-                          name: toolCall.function?.name || "",
-                          arguments: toolCall.function?.arguments || "",
-                        },
-                      });
-                      currentToolCallIndex = index;
-                    } else if (currentToolCallIndex >= 0 && toolCall.function?.arguments) {
-                      // 追加参数
-                      toolCalls[currentToolCallIndex].function.arguments += toolCall.function.arguments;
-                    }
+                    // 智谱 AI tool_stream 格式检测
+                    // 智谱格式: {"index":0,"id":"call_xxx","argumentsDelta":"增量","argumentsLength":369}
+                    // 标准格式: {"index":0,"function":{"name":"xxx","arguments":"增量"}}
+                    const isZhipuFormat = toolCall.argumentsDelta !== undefined;
                     
-                    // 更新工具调用 ID
-                    if (toolCall.id && currentToolCallIndex >= 0) {
-                      toolCalls[currentToolCallIndex].id = toolCall.id;
-                    }
-                    // 更新工具名称
-                    if (toolCall.function?.name && currentToolCallIndex >= 0) {
-                      toolCalls[currentToolCallIndex].function.name = toolCall.function.name;
+                    if (isZhipuFormat) {
+                      // 智谱 AI tool_stream 格式处理
+                      if (index !== undefined && index < toolCalls.length) {
+                        // 追加参数增量
+                        toolCalls[index].function.arguments += toolCall.argumentsDelta;
+                        
+                        // 更新工具调用 ID（如果有）
+                        if (toolCall.id) {
+                          toolCalls[index].id = toolCall.id;
+                        }
+                        
+                        // 发送参数增量事件
+                        await stream.writeSSE({
+                          event: "tool_call_arguments",
+                          data: JSON.stringify({
+                            index,
+                            id: toolCalls[index].id,
+                            argumentsDelta: toolCall.argumentsDelta,
+                            argumentsLength: toolCall.argumentsLength || toolCalls[index].function.arguments.length,
+                          }),
+                        });
+                      }
+                    } else {
+                      // 标准 OpenAI 格式处理
+                      // 新的工具调用
+                      if (index !== undefined && index >= toolCalls.length) {
+                        const newToolCall = {
+                          id: toolCall.id || `call_${index}`,
+                          type: "function" as const,
+                          function: {
+                            name: toolCall.function?.name || "",
+                            arguments: toolCall.function?.arguments || "",
+                          },
+                        };
+                        toolCalls.push(newToolCall);
+                        currentToolCallIndex = index;
+                        
+                        // 立即发送工具调用开始事件（让前端尽早显示）
+                        if (newToolCall.function.name) {
+                          await stream.writeSSE({
+                            event: "tool_call_start",
+                            data: JSON.stringify({
+                              index,
+                              id: newToolCall.id,
+                              name: newToolCall.function.name,
+                              executionLocation: getToolExecutionLocation(newToolCall.function.name) || "frontend",
+                            }),
+                          });
+                        }
+                      } else if (currentToolCallIndex >= 0 && toolCall.function?.arguments) {
+                        // 追加参数
+                        toolCalls[currentToolCallIndex].function.arguments += toolCall.function.arguments;
+                        
+                        // 实时发送工具参数增量（让前端可以实时显示进度）
+                        await stream.writeSSE({
+                          event: "tool_call_arguments",
+                          data: JSON.stringify({
+                            index: currentToolCallIndex,
+                            id: toolCalls[currentToolCallIndex].id,
+                            argumentsDelta: toolCall.function.arguments,
+                            argumentsLength: toolCalls[currentToolCallIndex].function.arguments.length,
+                          }),
+                        });
+                      }
+                      
+                      // 更新工具调用 ID
+                      if (toolCall.id && currentToolCallIndex >= 0) {
+                        toolCalls[currentToolCallIndex].id = toolCall.id;
+                      }
+                      // 更新工具名称（如果是新获取到的名称，也发送事件）
+                      if (toolCall.function?.name && currentToolCallIndex >= 0) {
+                        const prevName = toolCalls[currentToolCallIndex].function.name;
+                        toolCalls[currentToolCallIndex].function.name = toolCall.function.name;
+                        
+                        // 如果之前没有名称，现在有了，发送工具调用开始事件
+                        if (!prevName && toolCall.function.name) {
+                          await stream.writeSSE({
+                            event: "tool_call_start",
+                            data: JSON.stringify({
+                              index: currentToolCallIndex,
+                              id: toolCalls[currentToolCallIndex].id,
+                              name: toolCall.function.name,
+                              executionLocation: getToolExecutionLocation(toolCall.function.name) || "frontend",
+                            }),
+                          });
+                        }
+                      }
                     }
                   }
                 }

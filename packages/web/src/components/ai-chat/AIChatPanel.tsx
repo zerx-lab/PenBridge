@@ -4,6 +4,8 @@
  */
 
 import { useState, useRef, useCallback, useEffect } from "react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import { 
   Send, 
   Loader2, 
@@ -15,7 +17,6 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Select,
   SelectContent,
@@ -39,6 +40,33 @@ import type { AIChatPanelProps, ChatMessage, PendingChange } from "./types";
 const MIN_WIDTH = 320;
 const MAX_WIDTH = 600;
 const DEFAULT_WIDTH = 380;
+
+// AI 正在思考/工作的 Loading 状态组件
+function AILoadingIndicator({ message }: { message?: string }) {
+  return (
+    <div className="py-2">
+      <div className="flex items-start gap-2">
+        {/* AI 头像 */}
+        <div className="shrink-0 w-7 h-7 rounded-full bg-gradient-to-br from-purple-500 to-purple-600 flex items-center justify-center shadow-sm">
+          <Bot className="h-4 w-4 text-white" />
+        </div>
+        {/* 加载内容 */}
+        <div className="flex-1 pt-1">
+          <div className="flex items-center gap-2">
+            <div className="flex gap-1">
+              <span className="w-1.5 h-1.5 bg-purple-500 rounded-full animate-bounce [animation-delay:-0.3s]" />
+              <span className="w-1.5 h-1.5 bg-purple-500 rounded-full animate-bounce [animation-delay:-0.15s]" />
+              <span className="w-1.5 h-1.5 bg-purple-500 rounded-full animate-bounce" />
+            </div>
+            <span className="text-xs text-muted-foreground">
+              {message || "AI 正在思考..."}
+            </span>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 // 单条消息组件 - Cline 风格
 interface MessageItemProps {
@@ -74,8 +102,32 @@ function MessageItem({ message, pendingChanges, onAcceptChange, onRejectChange }
   const hasReasoning = message.reasoning || message.isReasoning;
   const hasToolCalls = message.toolCalls && message.toolCalls.length > 0;
   
+  // 检查是否是"空的 streaming 消息"（AI Loop 第二轮刚开始时的状态）
+  const isEmptyStreaming = isStreaming && !hasContent && !hasReasoning && !hasToolCalls;
+  
   return (
     <div className="py-2 space-y-2">
+      {/* 空的 streaming 消息 - 显示等待 AI 响应的状态 */}
+      {isEmptyStreaming && (
+        <div className="flex items-start gap-2">
+          <div className="shrink-0 w-7 h-7 rounded-full bg-gradient-to-br from-purple-500 to-purple-600 flex items-center justify-center shadow-sm">
+            <Bot className="h-4 w-4 text-white" />
+          </div>
+          <div className="flex-1 pt-1">
+            <div className="flex items-center gap-2">
+              <div className="flex gap-1">
+                <span className="w-1.5 h-1.5 bg-purple-500 rounded-full animate-bounce [animation-delay:-0.3s]" />
+                <span className="w-1.5 h-1.5 bg-purple-500 rounded-full animate-bounce [animation-delay:-0.15s]" />
+                <span className="w-1.5 h-1.5 bg-purple-500 rounded-full animate-bounce" />
+              </div>
+              <span className="text-xs text-muted-foreground">
+                AI 正在回复...
+              </span>
+            </div>
+          </div>
+        </div>
+      )}
+      
       {/* 思考过程块 - 最先显示 */}
       {hasReasoning && (
         <ThinkingBlock 
@@ -107,10 +159,12 @@ function MessageItem({ message, pendingChanges, onAcceptChange, onRejectChange }
             )}
           </div>
           
-          {/* 回答内容 */}
+          {/* 回答内容 - 使用 Markdown 渲染 */}
           <div className="px-3 py-2">
-            <div className="text-sm whitespace-pre-wrap break-words leading-relaxed">
-              {message.content}
+            <div className="text-sm leading-relaxed ai-chat-markdown">
+              <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                {message.content}
+              </ReactMarkdown>
               {isStreaming && !hasReasoning && !hasToolCalls && (
                 <span className="inline-block w-1.5 h-4 bg-purple-500 animate-pulse ml-0.5 align-middle" />
               )}
@@ -157,8 +211,12 @@ export function AIChatPanel({
   // Refs
   const panelRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const scrollAreaRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const isResizing = useRef(false);
+  
+  // 智能滚动状态：追踪用户是否在底部附近
+  const shouldAutoScrollRef = useRef(true);
   
   // AI 聊天 Hook
   const {
@@ -183,12 +241,62 @@ export function AIChatPanel({
     toolContext,
   });
   
-  // 自动滚动到底部
-  useEffect(() => {
-    if (messagesEndRef.current) {
-      messagesEndRef.current.scrollIntoView({ behavior: "smooth" });
+  // 判断用户是否在底部（允许 50px 的误差）
+  const isNearBottom = useCallback(() => {
+    const container = scrollAreaRef.current;
+    if (!container) return true;
+    const threshold = 50;
+    return container.scrollHeight - container.scrollTop - container.clientHeight <= threshold;
+  }, []);
+  
+  // 滚动到底部的函数
+  const scrollToBottom = useCallback(() => {
+    const container = scrollAreaRef.current;
+    if (container) {
+      container.scrollTop = container.scrollHeight;
     }
-  }, [messages]);
+  }, []);
+  
+  // 处理用户手动滚动事件
+  const handleScroll = useCallback(() => {
+    // 根据当前滚动位置更新是否应该自动滚动的状态
+    shouldAutoScrollRef.current = isNearBottom();
+  }, [isNearBottom]);
+  
+  // 获取消息内容的快照用于检测变化（包括流式输出的内容）
+  const lastMessage = messages[messages.length - 1];
+  const messagesSnapshot = messages.length > 0 ? {
+    length: messages.length,
+    lastContent: lastMessage?.content?.length || 0,
+    lastReasoning: lastMessage?.reasoning?.length || 0,
+    lastToolCalls: lastMessage?.toolCalls?.length || 0,
+    lastStatus: lastMessage?.status,
+  } : null;
+  
+  // 内容更新时的自动滚动逻辑
+  useEffect(() => {
+    // 如果用户在底部附近（shouldAutoScrollRef 为 true），则自动滚动
+    if (shouldAutoScrollRef.current) {
+      // 使用 requestAnimationFrame 确保在 DOM 更新后滚动
+      requestAnimationFrame(() => {
+        scrollToBottom();
+      });
+    }
+  }, [messagesSnapshot?.length, messagesSnapshot?.lastContent, messagesSnapshot?.lastReasoning, messagesSnapshot?.lastToolCalls, messagesSnapshot?.lastStatus, scrollToBottom]);
+  
+  // 发送新消息时，强制滚动到底部
+  useEffect(() => {
+    if (messages.length > 0) {
+      const lastMsg = messages[messages.length - 1];
+      // 当用户发送新消息时，强制启用自动滚动并滚动到底部
+      if (lastMsg?.role === "user" && lastMsg?.status === "completed") {
+        shouldAutoScrollRef.current = true;
+        requestAnimationFrame(() => {
+          scrollToBottom();
+        });
+      }
+    }
+  }, [messages.length, scrollToBottom]);
   
   // 拖拽调整宽度
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
@@ -338,10 +446,10 @@ export function AIChatPanel({
         </div>
         
         {/* 消息列表 */}
-        <div className="flex-1 min-h-0 overflow-hidden">
-          <ScrollArea className="h-full">
+        <div className="flex-1 min-h-0 relative">
+          <div ref={scrollAreaRef} className="absolute inset-0 overflow-y-auto" onScroll={handleScroll}>
             <div className="px-4 py-4">
-            {messages.length === 0 ? (
+            {messages.length === 0 && !isLoading ? (
               <div className="text-center text-muted-foreground py-8">
                 <Bot className="h-12 w-12 mx-auto mb-3 opacity-50" />
                 <p className="text-sm">开始与 AI 对话</p>
@@ -363,11 +471,41 @@ export function AIChatPanel({
                     onRejectChange={rejectPendingChange}
                   />
                 ))}
+                {/* AI 正在等待响应的 Loading 状态 */}
+                {isLoading && !isStreaming && pendingChanges.length === 0 && (() => {
+                  // 检查最后一条消息的状态来决定显示什么提示
+                  const lastMessage = messages[messages.length - 1];
+                  const hasRunningTools = lastMessage?.toolCalls?.some(
+                    tc => tc.status === "running" || tc.status === "pending"
+                  );
+                  const hasAwaitingTools = lastMessage?.toolCalls?.some(
+                    tc => tc.status === "awaiting_confirmation"
+                  );
+                  const hasCompletedTools = lastMessage?.toolCalls?.some(
+                    tc => tc.status === "completed"
+                  );
+                  
+                  // 如果有正在执行的工具，不显示底部 loading（工具块内已经有提示）
+                  if (hasRunningTools) {
+                    return null;
+                  }
+                  
+                  // 如果有等待确认的工具，不显示底部 loading（等待用户操作）
+                  if (hasAwaitingTools) {
+                    return null;
+                  }
+                  
+                  // 如果工具已完成，说明在等待 AI 继续回复
+                  const loadingMessage = hasCompletedTools 
+                    ? "AI 正在处理工具结果..." 
+                    : "AI 正在思考...";
+                  return <AILoadingIndicator message={loadingMessage} />;
+                })()}
                 <div ref={messagesEndRef} />
               </>
             )}
             </div>
-          </ScrollArea>
+          </div>
         </div>
         
         {/* 错误提示 */}

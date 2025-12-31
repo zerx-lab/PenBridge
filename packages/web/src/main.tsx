@@ -12,6 +12,7 @@ import { trpc } from "./utils/trpc";
 import { routeTree } from "./routeTree.gen";
 import { getAuthToken, clearAuthToken } from "./utils/auth";
 import { getTrpcUrl, initServerConfig } from "./utils/serverConfig";
+import { initFontSettings } from "./utils/fontSettings";
 
 import "./index.css";
 
@@ -147,6 +148,9 @@ function registerGlobalShortcuts() {
 async function initApp() {
   // 注册全局快捷键
   registerGlobalShortcuts();
+
+  // 初始化字体设置（应用保存的字体）
+  initFontSettings();
 
   // 初始化服务器配置（从 Electron 同步到 localStorage）
   // 必须在创建 tRPC 客户端之前完成
