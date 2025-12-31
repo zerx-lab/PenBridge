@@ -606,6 +606,31 @@ app.post("/api/ai/chat/stream", async (c) => {
     const thinkingConfig = capabilities?.thinking;
     const streamingConfig = capabilities?.streaming;
     const functionCallingSupported = capabilities?.functionCalling?.supported;
+    const visionSupported = capabilities?.vision?.supported;
+    
+    // 视觉模型消息格式转换函数
+    // OpenAI 和智谱 AI 的视觉模型需要将 user 消息的 content 从字符串转换为数组格式
+    // 格式: content: [{ type: "text", text: "消息内容" }, { type: "image_url", image_url: { url: "..." } }]
+    // 注意：system 消息的 content 应保持字符串格式，不需要转换
+    const convertToVisionFormat = (msg: any) => {
+      // system 消息不转换，保持字符串格式
+      if (msg.role === "system") {
+        return msg;
+      }
+      // 如果已经是数组格式，直接返回
+      if (Array.isArray(msg.content)) {
+        return msg;
+      }
+      // 如果是字符串，转换为视觉模型格式（仅 user/assistant 消息）
+      if (typeof msg.content === "string") {
+        return {
+          ...msg,
+          content: [{ type: "text", text: msg.content }],
+        };
+      }
+      // 其他情况（如 null/undefined），保持原样
+      return msg;
+    };
     
     // 构建系统提示
     let systemMessage = messages.find((m: any) => m.role === "system");
@@ -635,9 +660,16 @@ app.post("/api/ai/chat/stream", async (c) => {
     }
     
     // 组装最终消息
-    const finalMessages = systemMessage 
+    let finalMessages = systemMessage 
       ? [systemMessage, ...userMessages]
       : userMessages;
+    
+    // 如果是视觉模型，转换消息格式
+    // 视觉模型（OpenAI gpt-4-vision, 智谱 glm-4v 等）需要将 content 转换为数组格式
+    if (visionSupported) {
+      finalMessages = finalMessages.map(convertToVisionFormat);
+      logStep(`视觉模型检测: 已转换 ${finalMessages.length} 条消息为视觉格式`);
+    }
     
     // 构建请求体
     const requestBody: Record<string, any> = {
@@ -651,10 +683,13 @@ app.post("/api/ai/chat/stream", async (c) => {
     // 添加工具定义
     // 注意：OpenAI/智谱/DeepSeek 等主流平台都不需要特殊配置来启用工具调用
     // 只要在请求中传递 tools 参数，模型就会自动识别并使用
-    // 默认启用工具调用，仅当请求中 enableTools=false 时才禁用
-    // 注：functionCalling.supported 配置项已废弃，不再使用
-    const shouldEnableTools = enableTools !== false;
-    logStep(`工具配置: enableTools=${enableTools}, 最终=${shouldEnableTools}`);
+    // 工具启用条件：
+    // 1. 请求中 enableTools !== false（默认启用）
+    // 2. 模型配置中 functionCalling.supported !== false（默认支持）
+    // 注：某些视觉模型（如 glm-4.6v-flash）不支持工具调用，需要在模型配置中设置 functionCalling.supported = false
+    const functionCallingEnabled = capabilities?.functionCalling?.supported !== false;
+    const shouldEnableTools = enableTools !== false && functionCallingEnabled;
+    logStep(`工具配置: enableTools=${enableTools}, functionCallingSupported=${functionCallingEnabled}, 最终=${shouldEnableTools}`);
     
     if (shouldEnableTools) {
       const tools = formatToolsForAPI();
@@ -695,6 +730,8 @@ app.post("/api/ai/chat/stream", async (c) => {
     
     logStep("开始发起流式 API 请求");
     logStep(`请求体: tools=${requestBody.tools?.length || 0}个, tool_choice=${requestBody.tool_choice || '无'}`);
+    // 调试：打印完整请求体（仅在开发时使用）
+    console.log(`${logPrefix} 完整请求体:`, JSON.stringify(requestBody, null, 2));
     
     const response = await fetch(apiUrl, {
       method: "POST",
@@ -786,25 +823,80 @@ app.post("/api/ai/chat/stream", async (c) => {
                     
                     if (isZhipuFormat) {
                       // 智谱 AI tool_stream 格式处理
-                      if (index !== undefined && index < toolCalls.length) {
-                        // 追加参数增量
-                        toolCalls[index].function.arguments += toolCall.argumentsDelta;
+                      // 智谱格式可能包含: id, argumentsDelta, argumentsLength, function.name
+                      if (index !== undefined && index >= toolCalls.length) {
+                        // 新的工具调用：创建对象并发送 tool_call_start 事件
+                        const newToolCall = {
+                          id: toolCall.id || `call_${index}`,
+                          type: "function" as const,
+                          function: {
+                            name: toolCall.function?.name || "",
+                            arguments: toolCall.argumentsDelta || "",
+                          },
+                        };
+                        toolCalls.push(newToolCall);
+                        currentToolCallIndex = index;
+                        
+                        // 立即发送工具调用开始事件（如果有名称）
+                        if (newToolCall.function.name) {
+                          await stream.writeSSE({
+                            event: "tool_call_start",
+                            data: JSON.stringify({
+                              index,
+                              id: newToolCall.id,
+                              name: newToolCall.function.name,
+                              executionLocation: getToolExecutionLocation(newToolCall.function.name) || "frontend",
+                            }),
+                          });
+                        }
+                        
+                        // 发送参数增量事件
+                        if (toolCall.argumentsDelta) {
+                          await stream.writeSSE({
+                            event: "tool_call_arguments",
+                            data: JSON.stringify({
+                              index,
+                              id: newToolCall.id,
+                              argumentsDelta: toolCall.argumentsDelta,
+                              argumentsLength: toolCall.argumentsLength || newToolCall.function.arguments.length,
+                            }),
+                          });
+                        }
+                      } else if (index !== undefined && index < toolCalls.length) {
+                        // 追加参数增量到现有工具调用
+                        toolCalls[index].function.arguments += toolCall.argumentsDelta || "";
                         
                         // 更新工具调用 ID（如果有）
                         if (toolCall.id) {
                           toolCalls[index].id = toolCall.id;
                         }
                         
+                        // 如果工具名称之前为空，现在有了，发送 tool_call_start 事件
+                        if (toolCall.function?.name && !toolCalls[index].function.name) {
+                          toolCalls[index].function.name = toolCall.function.name;
+                          await stream.writeSSE({
+                            event: "tool_call_start",
+                            data: JSON.stringify({
+                              index,
+                              id: toolCalls[index].id,
+                              name: toolCall.function.name,
+                              executionLocation: getToolExecutionLocation(toolCall.function.name) || "frontend",
+                            }),
+                          });
+                        }
+                        
                         // 发送参数增量事件
-                        await stream.writeSSE({
-                          event: "tool_call_arguments",
-                          data: JSON.stringify({
-                            index,
-                            id: toolCalls[index].id,
-                            argumentsDelta: toolCall.argumentsDelta,
-                            argumentsLength: toolCall.argumentsLength || toolCalls[index].function.arguments.length,
-                          }),
-                        });
+                        if (toolCall.argumentsDelta) {
+                          await stream.writeSSE({
+                            event: "tool_call_arguments",
+                            data: JSON.stringify({
+                              index,
+                              id: toolCalls[index].id,
+                              argumentsDelta: toolCall.argumentsDelta,
+                              argumentsLength: toolCall.argumentsLength || toolCalls[index].function.arguments.length,
+                            }),
+                          });
+                        }
                       }
                     } else {
                       // 标准 OpenAI 格式处理

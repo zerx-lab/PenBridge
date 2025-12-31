@@ -1846,6 +1846,10 @@ export const appRouter = t.router({
             vision: z.object({
               supported: z.boolean(),
             }).optional(),
+            // AI Loop 配置
+            aiLoop: z.object({
+              maxLoopCount: z.number().min(1).max(100),
+            }).optional(),
           }).optional(),
         })
       )
@@ -1918,6 +1922,10 @@ export const appRouter = t.router({
             // 视觉理解（多模态）
             vision: z.object({
               supported: z.boolean(),
+            }).optional(),
+            // AI Loop 配置
+            aiLoop: z.object({
+              maxLoopCount: z.number().min(1).max(100),
             }).optional(),
           }).optional(),
         })

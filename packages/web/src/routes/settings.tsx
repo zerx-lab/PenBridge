@@ -2184,7 +2184,7 @@ function AIConfigSettings() {
         enabled: true,
       },
       functionCalling: {
-        supported: false,
+        supported: true,
       },
       vision: {
         supported: false,
@@ -3116,6 +3116,22 @@ function AIConfigSettings() {
                             capabilities: {
                               ...modelForm.capabilities,
                               streaming: { supported: checked, enabled: checked },
+                            },
+                          })}
+                        />
+                      </div>
+                      <div className="flex items-center justify-between p-2 rounded-md bg-muted/50">
+                        <Label htmlFor="function-calling-supported" className="text-sm font-normal">
+                          工具调用
+                        </Label>
+                        <Switch
+                          id="function-calling-supported"
+                          checked={modelForm.capabilities.functionCalling.supported}
+                          onCheckedChange={(checked) => setModelForm({
+                            ...modelForm,
+                            capabilities: {
+                              ...modelForm.capabilities,
+                              functionCalling: { supported: checked },
                             },
                           })}
                         />
