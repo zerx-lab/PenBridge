@@ -345,10 +345,31 @@ jobs:
           path: electron/out/make/**/*
           retention-days: 7
 
+  # 部署到服务器
+  deploy:
+    needs: [prepare, build-docker]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy to server
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ vars.DEPLOY_HOST }}
+          username: ${{ vars.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_KEY }}
+          port: ${{ vars.DEPLOY_PORT || 22 }}
+          script: |
+            cd ${{ vars.DEPLOY_PATH }}
+            # 拉取最新镜像
+            docker compose pull
+            # 重启服务
+            docker compose up -d
+            # 清理旧镜像
+            docker image prune -f
+
   # 创建 Release（仅在推送标签时）
   release:
     if: startsWith(github.ref, 'refs/tags/')
-    needs: [prepare, build-macos, build-windows, build-linux, build-docker]
+    needs: [prepare, build-macos, build-windows, build-linux, build-docker, deploy]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
