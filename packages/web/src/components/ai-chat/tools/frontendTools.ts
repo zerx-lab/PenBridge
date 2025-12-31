@@ -497,6 +497,13 @@ export async function executeToolCalls(
       // 如果有待确认的变更
       if (result.pendingChange) {
         pendingChanges.push(result.pendingChange);
+
+        // 🔧 修复：更新 context.content 为新值，使后续工具调用基于最新内容
+        // 这解决了同一轮对话中多个 replace_content 调用时，后面的替换会覆盖前面替换的 bug
+        if (result.pendingChange.type === 'content' && result.pendingChange.newValue) {
+          context.content = result.pendingChange.newValue;
+        }
+
         results.push({
           ...toolCall,
           status: "awaiting_confirmation",
