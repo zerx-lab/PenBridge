@@ -16,11 +16,13 @@ import type {
   ToolCallRecord,
   PendingChange,
   UseAIChatReturn,
+  ThinkingSettings,
 } from "../types";
 import { executeToolCalls, applyPendingChange } from "../tools/frontendTools";
 
 const DEFAULT_MAX_LOOP_COUNT = 20;
 const SELECTED_MODEL_KEY = "editor-ai-selected-model-preference";
+const THINKING_SETTINGS_KEY = "editor-ai-thinking-settings";
 
 interface UseAIChatOptions {
   articleId?: number;
@@ -39,6 +41,20 @@ export function useAIChat(options: UseAIChatOptions): UseAIChatReturn {
   const [selectedModel, setSelectedModel] = useState<AIModelInfo | null>(null);
   const [currentLoopCount, setCurrentLoopCount] = useState(0);
   
+  // 深度思考设置（在 AI Chat 面板中动态控制）
+  const [thinkingSettings, setThinkingSettings] = useState<ThinkingSettings>(() => {
+    // 从 localStorage 恢复设置
+    const savedSettings = localStorage.getItem(THINKING_SETTINGS_KEY);
+    if (savedSettings) {
+      try {
+        return JSON.parse(savedSettings);
+      } catch {
+        // 解析失败，使用默认值
+      }
+    }
+    return { enabled: false, reasoningEffort: "medium" as const };
+  });
+  
   // 待确认变更状态
   const [pendingChanges, setPendingChanges] = useState<PendingChange[]>([]);
   const [currentPendingChange, setCurrentPendingChange] = useState<PendingChange | null>(null);
@@ -53,6 +69,9 @@ export function useAIChat(options: UseAIChatOptions): UseAIChatReturn {
     assistantContent: string;
     toolCalls: ToolCallRecord[];
   } | null>(null);
+  
+  // 存储已处理的工具调用结果（用于在所有变更处理完后恢复 AI Loop）
+  const processedToolResultsRef = useRef<Map<string, string>>(new Map());
   
   // tRPC
   const utils = trpc.useContext();
@@ -279,6 +298,11 @@ export function useAIChat(options: UseAIChatOptions): UseAIChatReturn {
       }
       
       const apiBaseUrl = getApiBaseUrl();
+      
+      // 构建深度思考配置（仅当模型支持时才传递）
+      const thinkingSupported = selectedModel.capabilities?.thinking?.supported;
+      const thinkingApiFormat = selectedModel.capabilities?.thinking?.apiFormat;
+      
       const response = await fetch(`${apiBaseUrl}/api/ai/chat/stream`, {
         method: "POST",
         headers: {
@@ -295,6 +319,14 @@ export function useAIChat(options: UseAIChatOptions): UseAIChatReturn {
             title: toolContext.title,
             contentLength: toolContext.content.length,
           } : undefined,
+          // 深度思考设置（动态传递）
+          ...(thinkingSupported && thinkingSettings.enabled ? {
+            thinkingEnabled: true,
+            // 仅 OpenAI 格式时传递推理努力程度
+            ...(thinkingApiFormat === "openai" ? {
+              reasoningEffort: thinkingSettings.reasoningEffort,
+            } : {}),
+          } : {}),
         }),
         signal: abortController.signal,
       });
@@ -885,6 +917,9 @@ export function useAIChat(options: UseAIChatOptions): UseAIChatReturn {
           error: result.error,
         });
     
+    // 保存此工具调用的结果，用于后续恢复 AI Loop
+    processedToolResultsRef.current.set(change.toolCallId, toolResult);
+    
     if (result.success) {
       // 更新对应工具调用的状态为已完成
       setMessages(prev => prev.map(m => ({
@@ -924,14 +959,19 @@ export function useAIChat(options: UseAIChatOptions): UseAIChatReturn {
     
     // 如果所有待确认变更都处理完了，恢复 AI Loop
     if (remaining.length === 0 && pausedStateRef.current) {
-      // 收集所有工具调用的结果
+      // 收集所有工具调用的结果（从 processedToolResultsRef 中获取已处理的结果）
       const toolResults = pausedStateRef.current.toolCalls.map(tc => {
-        if (tc.id === change.toolCallId) {
-          return { id: tc.id, result: toolResult };
+        // 优先使用已处理保存的结果
+        const savedResult = processedToolResultsRef.current.get(tc.id);
+        if (savedResult) {
+          return { id: tc.id, result: savedResult };
         }
-        // 其他工具调用的结果从 messages 中获取
+        // 其他工具调用的结果（非待确认的工具）
         return { id: tc.id, result: tc.result || "工具执行完成" };
       });
+      
+      // 清空已处理结果的缓存
+      processedToolResultsRef.current.clear();
       
       await resumeAILoop(toolResults);
     }
@@ -943,6 +983,9 @@ export function useAIChat(options: UseAIChatOptions): UseAIChatReturn {
       message: "用户拒绝了此修改，请不要再次尝试相同的修改",
       rejected: true,
     });
+    
+    // 保存此工具调用的结果，用于后续恢复 AI Loop
+    processedToolResultsRef.current.set(change.toolCallId, toolResult);
     
     // 更新对应工具调用的状态为已完成（但标记为被拒绝）
     setMessages(prev => prev.map(m => ({
@@ -966,18 +1009,28 @@ export function useAIChat(options: UseAIChatOptions): UseAIChatReturn {
     
     // 如果所有待确认变更都处理完了，恢复 AI Loop
     if (remaining.length === 0 && pausedStateRef.current) {
-      // 收集所有工具调用的结果
+      // 收集所有工具调用的结果（从 processedToolResultsRef 中获取已处理的结果）
       const toolResults = pausedStateRef.current.toolCalls.map(tc => {
-        if (tc.id === change.toolCallId) {
-          return { id: tc.id, result: toolResult };
+        // 优先使用已处理保存的结果
+        const savedResult = processedToolResultsRef.current.get(tc.id);
+        if (savedResult) {
+          return { id: tc.id, result: savedResult };
         }
-        // 其他工具调用的结果从 messages 中获取
+        // 其他工具调用的结果（非待确认的工具）
         return { id: tc.id, result: tc.result || "工具执行完成" };
       });
+      
+      // 清空已处理结果的缓存
+      processedToolResultsRef.current.clear();
       
       await resumeAILoop(toolResults);
     }
   }, [pendingChanges, resumeAILoop]);
+  
+  // 保存深度思考设置到 localStorage
+  useEffect(() => {
+    localStorage.setItem(THINKING_SETTINGS_KEY, JSON.stringify(thinkingSettings));
+  }, [thinkingSettings]);
   
   return {
     session,
@@ -988,6 +1041,9 @@ export function useAIChat(options: UseAIChatOptions): UseAIChatReturn {
     selectedModel,
     availableModels,
     setSelectedModel,
+    // 深度思考设置
+    thinkingSettings,
+    setThinkingSettings,
     sendMessage,
     stopGeneration,
     clearMessages,

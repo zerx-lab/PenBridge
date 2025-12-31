@@ -14,6 +14,7 @@ import {
   StopCircle,
   PanelRightClose,
   AlertCircle,
+  Brain,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -34,54 +35,7 @@ import type { AIChatPanelProps, ChatMessage, PendingChange } from "./types";
 const MIN_WIDTH = 280;
 const DEFAULT_WIDTH = 380;
 
-// 模型选择器组件 - 使用 antd Select 避免 Portal 导致的图片重新请求问题
-interface ModelSelectorProps {
-  selectedModel: { providerId: number; modelId: string } | null;
-  availableModels: Array<{
-    providerId: number;
-    modelId: string;
-    displayName: string;
-    providerName: string;
-  }>;
-  onModelChange: (modelId: string) => void;
-}
 
-function ModelSelector({
-  selectedModel,
-  availableModels,
-  onModelChange,
-}: ModelSelectorProps) {
-  const currentValue = selectedModel 
-    ? `${selectedModel.providerId}_${selectedModel.modelId}` 
-    : undefined;
-  
-  const options = availableModels.map(model => ({
-    value: `${model.providerId}_${model.modelId}`,
-    label: (
-      <span className="text-xs">
-        {model.displayName}
-        <span className="text-muted-foreground ml-2">
-          ({model.providerName})
-        </span>
-      </span>
-    ),
-  }));
-  
-  return (
-    <div className="px-4 py-2 border-b shrink-0">
-      <AntdSelect
-        value={currentValue}
-        onChange={onModelChange}
-        options={options}
-        placeholder="选择模型"
-        className="w-full ai-model-select"
-        size="small"
-        popupClassName="ai-model-select-popup"
-        getPopupContainer={(triggerNode) => triggerNode.parentElement || document.body}
-      />
-    </div>
-  );
-}
 
 // AI 正在思考/工作的 Loading 状态组件
 function AILoadingIndicator({ message }: { message?: string }) {
@@ -271,6 +225,9 @@ export function AIChatPanel({
     selectedModel,
     availableModels,
     setSelectedModel,
+    // 深度思考设置
+    thinkingSettings,
+    setThinkingSettings,
     sendMessage,
     stopGeneration,
     clearMessages,
@@ -476,13 +433,6 @@ export function AIChatPanel({
         </div>
       </div>
         
-        {/* 模型选择 - 使用 antd Select 避免 Portal 影响编辑器 */}
-        <ModelSelector
-          selectedModel={selectedModel}
-          availableModels={availableModels}
-          onModelChange={handleModelChange}
-        />
-        
         {/* Token 使用量展示 - 仅在有实际使用量时显示 */}
         {sessionTokens > 0 && (
           <div className="px-4 py-2 border-b shrink-0 space-y-1">
@@ -598,9 +548,10 @@ export function AIChatPanel({
           </div>
         )}
         
-        {/* 输入区域 */}
-        <div className="px-4 py-3 border-t shrink-0">
-          <div className="relative">
+        {/* 输入区域 - 参考 Claude 风格 */}
+        <div className="border-t shrink-0">
+          {/* 输入框 */}
+          <div className="px-3 pt-3">
             <Textarea
               ref={textareaRef}
               value={inputValue}
@@ -611,34 +562,105 @@ export function AIChatPanel({
                   ? "请先选择 AI 模型..." 
                   : isStreaming 
                     ? "AI 正在回复..." 
-                    : "输入消息... (Enter 发送, Shift+Enter 换行)"
+                    : "输入消息..."
               }
               disabled={!selectedModel || isLoading}
-              className="resize-none pr-12 min-h-[80px] max-h-[200px]"
-              rows={3}
+              className="resize-none min-h-[60px] max-h-[150px] border-0 shadow-none focus-visible:ring-0 px-0"
+              rows={2}
             />
-            <div className="absolute right-2 bottom-2 flex gap-1">
+          </div>
+          
+          {/* 底部工具栏 */}
+          <div className="flex items-center justify-between px-3 py-2">
+            {/* 左侧：深度思考开关 */}
+            <div className="flex items-center gap-2">
+              {selectedModel?.capabilities?.thinking?.supported && (
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant={thinkingSettings.enabled ? "secondary" : "ghost"}
+                        size="sm"
+                        className={cn(
+                          "h-7 gap-1.5 text-xs",
+                          thinkingSettings.enabled && "bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300"
+                        )}
+                        onClick={() => setThinkingSettings({ ...thinkingSettings, enabled: !thinkingSettings.enabled })}
+                        disabled={isLoading || isStreaming}
+                      >
+                        <Brain className="h-3.5 w-3.5" />
+                        <span>深度思考</span>
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent side="top">
+                      {thinkingSettings.enabled ? "关闭深度思考" : "开启深度思考"}
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              )}
+              {/* OpenAI 格式时显示推理努力程度 */}
+              {selectedModel?.capabilities?.thinking?.supported && 
+               selectedModel?.capabilities?.thinking?.apiFormat === "openai" && 
+               thinkingSettings.enabled && (
+                <AntdSelect
+                  value={thinkingSettings.reasoningEffort}
+                  onChange={(value) => setThinkingSettings({ ...thinkingSettings, reasoningEffort: value })}
+                  disabled={isLoading || isStreaming}
+                  size="small"
+                  variant="borderless"
+                  className="w-16 ai-chat-select"
+                  popupClassName="ai-chat-select-popup"
+                  getPopupContainer={(triggerNode) => triggerNode.parentElement || document.body}
+                  options={[
+                    { value: "low", label: "低" },
+                    { value: "medium", label: "中" },
+                    { value: "high", label: "高" },
+                  ]}
+                />
+              )}
+            </div>
+            
+            {/* 右侧：模型选择 + 发送按钮 */}
+            <div className="flex items-center gap-2">
+              {/* 模型选择器 */}
+              <AntdSelect
+                value={selectedModel ? `${selectedModel.providerId}_${selectedModel.modelId}` : undefined}
+                onChange={handleModelChange}
+                placeholder="选择模型"
+                size="small"
+                variant="borderless"
+                className="min-w-24 ai-chat-select"
+                popupClassName="ai-chat-select-popup"
+                popupMatchSelectWidth={false}
+                getPopupContainer={(triggerNode) => triggerNode.parentElement || document.body}
+                options={availableModels.map(model => ({
+                  value: `${model.providerId}_${model.modelId}`,
+                  label: model.displayName,
+                }))}
+              />
+              
+              {/* 发送/停止按钮 */}
               {isStreaming ? (
                 <Button
-                  variant="ghost"
+                  variant="secondary"
                   size="icon"
-                  className="h-8 w-8 text-red-500 hover:text-red-600"
+                  className="h-7 w-7 rounded-full bg-red-500 hover:bg-red-600 text-white"
                   onClick={stopGeneration}
                 >
                   <StopCircle className="h-4 w-4" />
                 </Button>
               ) : (
                 <Button
-                  variant="ghost"
+                  variant="secondary"
                   size="icon"
-                  className="h-8 w-8"
+                  className="h-7 w-7 rounded-full bg-purple-500 hover:bg-purple-600 text-white disabled:opacity-50"
                   onClick={handleSend}
                   disabled={!inputValue.trim() || isLoading || !selectedModel}
                 >
                   {isLoading ? (
                     <Loader2 className="h-4 w-4 animate-spin" />
                   ) : (
-                    <Send className="h-4 w-4" />
+                    <Send className="h-3.5 w-3.5" />
                   )}
                 </Button>
               )}

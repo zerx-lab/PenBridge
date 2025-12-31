@@ -1262,6 +1262,109 @@ a .text-foreground,
   background: var(--accent) !important;
 }
 
+/* ==================== AI 聊天工具栏紧凑选择器样式 ==================== */
+.ai-chat-select {
+  font-size: 11px !important;
+}
+
+.ai-chat-select .ant-select-selector {
+  height: 26px !important;
+  min-height: 26px !important;
+  padding: 0 8px !important;
+  border-radius: 6px !important;
+  border: none !important;
+  background: var(--muted) !important;
+  transition: all 0.15s ease !important;
+}
+
+.ai-chat-select .ant-select-selection-item {
+  line-height: 24px !important;
+  font-size: 11px !important;
+  padding-right: 16px !important;
+  color: var(--foreground) !important;
+}
+
+.ai-chat-select .ant-select-selection-placeholder {
+  line-height: 24px !important;
+  font-size: 11px !important;
+  color: var(--muted-foreground) !important;
+}
+
+.ai-chat-select .ant-select-arrow {
+  right: 6px !important;
+  font-size: 10px !important;
+  color: var(--muted-foreground) !important;
+}
+
+.ai-chat-select:hover .ant-select-selector {
+  background: var(--accent) !important;
+}
+
+.ai-chat-select.ant-select-focused .ant-select-selector {
+  background: var(--accent) !important;
+  box-shadow: none !important;
+}
+
+.ai-chat-select.ant-select-disabled .ant-select-selector {
+  opacity: 0.5 !important;
+  cursor: not-allowed !important;
+}
+
+/* 弹出层样式 */
+.ai-chat-select-popup {
+  font-size: 11px !important;
+  border-radius: 8px !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1) !important;
+  overflow: hidden !important;
+}
+
+.ai-chat-select-popup .ant-select-item {
+  font-size: 11px !important;
+  padding: 6px 10px !important;
+  min-height: 28px !important;
+  line-height: 16px !important;
+}
+
+.ai-chat-select-popup .ant-select-item-option-active {
+  background: var(--accent) !important;
+}
+
+.ai-chat-select-popup .ant-select-item-option-selected {
+  background: var(--accent) !important;
+  font-weight: 500 !important;
+}
+
+/* 深色模式 */
+.dark .ai-chat-select .ant-select-selector {
+  background: oklch(0.269 0 0) !important;
+}
+
+.dark .ai-chat-select:hover .ant-select-selector {
+  background: oklch(0.32 0 0) !important;
+}
+
+.dark .ai-chat-select.ant-select-focused .ant-select-selector {
+  background: oklch(0.32 0 0) !important;
+}
+
+.dark .ai-chat-select-popup {
+  background: var(--popover) !important;
+  border: 1px solid var(--border) !important;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3) !important;
+}
+
+.dark .ai-chat-select-popup .ant-select-item {
+  color: var(--foreground) !important;
+}
+
+.dark .ai-chat-select-popup .ant-select-item-option-active {
+  background: var(--accent) !important;
+}
+
+.dark .ai-chat-select-popup .ant-select-item-option-selected {
+  background: var(--accent) !important;
+}
+
 /* ==================== 设置抽屉样式 - antd Drawer ==================== */
 /* 使用 getContainer={false} 时，Drawer wrapper 是 absolute 定位 */
 /* 确保不会超出父容器边界，并避开 Electron titlebar (32px) */
@@ -1313,5 +1416,38 @@ a .text-foreground,
 
 .dark .settings-drawer .ant-drawer-title {
   color: var(--foreground) !important;
+}
+
+/* ==================== 编辑器搜索高亮样式 ==================== */
+/* 高亮层容器 */
+.editor-search-highlight-layer {
+  pointer-events: none;
+}
+
+/* 普通匹配项 - 使用 mix-blend-mode 让文字可见 */
+.editor-search-highlight {
+  background-color: rgba(255, 235, 59, 0.5);
+  border-radius: 2px;
+  mix-blend-mode: multiply;
+}
+
+/* 当前选中项 - 更深的颜色 */
+.editor-search-highlight-current {
+  background-color: rgba(255, 152, 0, 0.6);
+  border-radius: 2px;
+  mix-blend-mode: multiply;
+  box-shadow: 0 0 0 2px rgba(255, 152, 0, 0.4);
+}
+
+/* 暗色模式搜索高亮 - 使用 screen 模式让亮色背景在深色上可见 */
+.dark .editor-search-highlight {
+  background-color: rgba(255, 235, 59, 0.4);
+  mix-blend-mode: screen;
+}
+
+.dark .editor-search-highlight-current {
+  background-color: rgba(255, 152, 0, 0.5);
+  mix-blend-mode: screen;
+  box-shadow: 0 0 0 2px rgba(255, 152, 0, 0.3);
 }
 

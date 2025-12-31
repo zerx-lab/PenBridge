@@ -2176,9 +2176,8 @@ function AIConfigSettings() {
     capabilities: {
       thinking: {
         supported: false,
-        enabled: false,
         apiFormat: "standard" as "standard" | "openai",
-        reasoningEffort: "medium" as "low" | "medium" | "high",
+        // 注意：enabled 和 reasoningEffort 已移至 AI Chat 面板动态选择
         reasoningSummary: "auto" as "auto" | "detailed" | "concise" | "disabled",
       },
       streaming: {
@@ -2309,9 +2308,8 @@ function AIConfigSettings() {
   const defaultCapabilities = {
     thinking: {
       supported: false,
-      enabled: false,
       apiFormat: "standard" as "standard" | "openai",
-      reasoningEffort: "medium" as "low" | "medium" | "high",
+      // 注意：enabled 和 reasoningEffort 已移至 AI Chat 面板动态选择
       reasoningSummary: "auto" as "auto" | "detailed" | "concise" | "disabled",
     },
     streaming: {
@@ -3013,32 +3011,17 @@ function AIConfigSettings() {
                               thinking: {
                                 ...modelForm.capabilities.thinking,
                                 supported: checked,
-                                enabled: checked ? modelForm.capabilities.thinking.enabled : false,
                               },
                             },
                           })}
                         />
                       </div>
+                      <p className="text-xs text-muted-foreground">
+                        是否启用深度思考可在 AI 助手面板中动态切换
+                      </p>
                       
                       {modelForm.capabilities.thinking.supported && (
                         <>
-                          <div className="flex items-center justify-between">
-                            <Label htmlFor="thinking-enabled" className="text-sm font-normal text-muted-foreground">
-                              启用深度思考
-                            </Label>
-                            <Switch
-                              id="thinking-enabled"
-                              checked={modelForm.capabilities.thinking.enabled}
-                              onCheckedChange={(checked) => setModelForm({
-                                ...modelForm,
-                                capabilities: {
-                                  ...modelForm.capabilities,
-                                  thinking: { ...modelForm.capabilities.thinking, enabled: checked },
-                                },
-                              })}
-                            />
-                          </div>
-                          
                           <div className="space-y-1">
                             <Label htmlFor="thinking-api-format" className="text-xs text-muted-foreground">
                               API 格式
@@ -3064,60 +3047,34 @@ function AIConfigSettings() {
                           </div>
                           
                           {modelForm.capabilities.thinking.apiFormat === "openai" && (
-                            <>
-                              <div className="space-y-1">
-                                <Label htmlFor="reasoning-effort" className="text-xs text-muted-foreground">
-                                  推理努力程度
-                                </Label>
-                                <Select
-                                  value={modelForm.capabilities.thinking.reasoningEffort}
-                                  onValueChange={(value: "low" | "medium" | "high") => setModelForm({
-                                    ...modelForm,
-                                    capabilities: {
-                                      ...modelForm.capabilities,
-                                      thinking: { ...modelForm.capabilities.thinking, reasoningEffort: value },
-                                    },
-                                  })}
-                                >
-                                  <SelectTrigger id="reasoning-effort">
-                                    <SelectValue />
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    <SelectItem value="low">低 (快速响应)</SelectItem>
-                                    <SelectItem value="medium">中 (平衡)</SelectItem>
-                                    <SelectItem value="high">高 (深度思考)</SelectItem>
-                                  </SelectContent>
-                                </Select>
-                              </div>
-                              <div className="space-y-1">
-                                <Label htmlFor="reasoning-summary" className="text-xs text-muted-foreground">
-                                  推理摘要
-                                </Label>
-                                <Select
-                                  value={modelForm.capabilities.thinking.reasoningSummary}
-                                  onValueChange={(value: "auto" | "detailed" | "concise" | "disabled") => setModelForm({
-                                    ...modelForm,
-                                    capabilities: {
-                                      ...modelForm.capabilities,
-                                      thinking: { ...modelForm.capabilities.thinking, reasoningSummary: value },
-                                    },
-                                  })}
-                                >
-                                  <SelectTrigger id="reasoning-summary">
-                                    <SelectValue />
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    <SelectItem value="auto">自动</SelectItem>
-                                    <SelectItem value="detailed">详细</SelectItem>
-                                    <SelectItem value="concise">简洁</SelectItem>
-                                    <SelectItem value="disabled">禁用</SelectItem>
-                                  </SelectContent>
-                                </Select>
-                                <p className="text-xs text-muted-foreground mt-1">
-                                  OpenAI 不返回原始思维链，仅提供推理摘要
-                                </p>
-                              </div>
-                            </>
+                            <div className="space-y-1">
+                              <Label htmlFor="reasoning-summary" className="text-xs text-muted-foreground">
+                                推理摘要
+                              </Label>
+                              <Select
+                                value={modelForm.capabilities.thinking.reasoningSummary}
+                                onValueChange={(value: "auto" | "detailed" | "concise" | "disabled") => setModelForm({
+                                  ...modelForm,
+                                  capabilities: {
+                                    ...modelForm.capabilities,
+                                    thinking: { ...modelForm.capabilities.thinking, reasoningSummary: value },
+                                  },
+                                })}
+                              >
+                                <SelectTrigger id="reasoning-summary">
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="auto">自动</SelectItem>
+                                  <SelectItem value="detailed">详细</SelectItem>
+                                  <SelectItem value="concise">简洁</SelectItem>
+                                  <SelectItem value="disabled">禁用</SelectItem>
+                                </SelectContent>
+                              </Select>
+                              <p className="text-xs text-muted-foreground mt-1">
+                                OpenAI 不返回原始思维链，仅提供推理摘要。推理努力程度可在 AI 助手面板中选择。
+                              </p>
+                            </div>
                           )}
                         </>
                       )}

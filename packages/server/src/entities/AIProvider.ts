@@ -109,23 +109,22 @@ export class AIModel {
     thinking?: {
       // 该模型是否支持深度思考功能
       supported: boolean;
-      // 是否启用深度思考（用户可手动开关）
-      enabled: boolean;
       // API 格式类型（用于确定请求格式）
       // - standard: 标准格式，使用 thinking.type = "enabled" | "disabled"
       //   适用于：智谱 GLM、DeepSeek 等兼容 API
       // - openai: OpenAI 专用格式，使用 reasoning.effort = "low" | "medium" | "high"
       //   适用于：OpenAI o1/o3/gpt-5 等推理模型
       apiFormat?: "standard" | "openai";
-      // OpenAI 推理努力程度 (仅 openai 格式使用)
-      reasoningEffort?: "low" | "medium" | "high";
-      // OpenAI 推理摘要类型 (仅 openai 格式使用)
+      // OpenAI 推理摘要类型 (仅 openai 格式使用，在设置中固定配置)
       // - auto: 自动生成摘要
       // - detailed: 详细摘要
       // - concise: 简洁摘要
       // - disabled: 不生成摘要
       // 注意：OpenAI 不返回原始思维链，只能通过摘要了解推理过程
       reasoningSummary?: "auto" | "detailed" | "concise" | "disabled";
+      // 注意：以下字段已移至 AI Chat 面板动态选择，不再在模型配置中固定：
+      // - enabled: 是否启用深度思考（在 AI Chat 面板中通过开关控制）
+      // - reasoningEffort: OpenAI 推理努力程度（在 AI Chat 面板中选择）
     };
     // 流式输出
     streaming?: {

@@ -107,7 +107,13 @@ export interface AIModelInfo {
   // 上下文最大长度（tokens）- 用于展示使用进度
   contextLength?: number;
   capabilities?: {
-    thinking?: { supported: boolean; enabled: boolean };
+    thinking?: { 
+      supported: boolean;
+      // API 格式类型：standard（智谱/DeepSeek）或 openai（o1/o3/gpt-5）
+      apiFormat?: "standard" | "openai";
+      // 推理摘要（仅 openai 格式，在设置中固定配置）
+      reasoningSummary?: "auto" | "detailed" | "concise" | "disabled";
+    };
     streaming?: { supported: boolean; enabled: boolean };
     functionCalling?: { supported: boolean };
     aiLoop?: { maxLoopCount: number };
@@ -145,6 +151,13 @@ export interface SSEEventData {
   hasToolCalls?: boolean;
 }
 
+// 深度思考配置（用于 AI Chat 面板动态选择）
+export interface ThinkingSettings {
+  enabled: boolean;
+  // 推理努力程度（仅 OpenAI 格式时使用）
+  reasoningEffort: "low" | "medium" | "high";
+}
+
 // useAIChat Hook 返回值
 export interface UseAIChatReturn {
   // 状态
@@ -158,6 +171,10 @@ export interface UseAIChatReturn {
   selectedModel: AIModelInfo | null;
   availableModels: AIModelInfo[];
   setSelectedModel: (model: AIModelInfo | null) => void;
+  
+  // 深度思考设置（动态控制）
+  thinkingSettings: ThinkingSettings;
+  setThinkingSettings: (settings: ThinkingSettings) => void;
   
   // 操作
   sendMessage: (content: string) => Promise<void>;

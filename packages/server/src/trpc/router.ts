@@ -1828,11 +1828,10 @@ export const appRouter = t.router({
           // 模型能力配置
           capabilities: z.object({
             // 深度思考/推理模式
+            // 注意：enabled 和 reasoningEffort 已移至 AI Chat 面板动态选择
             thinking: z.object({
               supported: z.boolean(),
-              enabled: z.boolean(),
               apiFormat: z.enum(["standard", "openai"]).optional(),
-              reasoningEffort: z.enum(["low", "medium", "high"]).optional(),
               reasoningSummary: z.enum(["auto", "detailed", "concise", "disabled"]).optional(),
             }).optional(),
             // 流式输出
@@ -1907,11 +1906,10 @@ export const appRouter = t.router({
           // 模型能力配置
           capabilities: z.object({
             // 深度思考/推理模式
+            // 注意：enabled 和 reasoningEffort 已移至 AI Chat 面板动态选择
             thinking: z.object({
               supported: z.boolean(),
-              enabled: z.boolean(),
               apiFormat: z.enum(["standard", "openai"]).optional(),
-              reasoningEffort: z.enum(["low", "medium", "high"]).optional(),
               reasoningSummary: z.enum(["auto", "detailed", "concise", "disabled"]).optional(),
             }).optional(),
             // 流式输出

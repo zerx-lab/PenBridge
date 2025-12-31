@@ -215,36 +215,35 @@ app.post("/api/ai/chat", async (c) => {
     };
     
     // 根据模型的深度思考配置添加相应参数
+    // 测试对话中，如果模型支持深度思考，总是启用以便测试
     if (thinkingConfig?.supported) {
       const apiFormat = thinkingConfig.apiFormat || "standard";
-      const thinkingEnabled = thinkingConfig.enabled;
       
-      console.log(`${logPrefix} 深度思考配置: apiFormat=${apiFormat}, supported=${thinkingConfig.supported}, enabled=${thinkingEnabled}`);
+      console.log(`${logPrefix} 深度思考配置: apiFormat=${apiFormat}, supported=${thinkingConfig.supported}`);
       
       if (apiFormat === "openai") {
         // OpenAI 专用格式: 使用 reasoning.effort 参数
         // 适用于 OpenAI o1/o3/gpt-5 等推理模型
-        if (thinkingEnabled) {
-          const reasoningParams: Record<string, any> = {
-            effort: thinkingConfig.reasoningEffort || "medium",
-          };
-          
-          // 添加 summary 参数（如果配置了且不是 disabled）
-          // OpenAI 不返回原始思维链，但可以返回推理摘要
-          const summaryType = thinkingConfig.reasoningSummary;
-          if (summaryType && summaryType !== "disabled") {
-            reasoningParams.summary = summaryType;
-          }
-          
-          requestBody.reasoning = reasoningParams;
-          console.log(`${logPrefix} OpenAI 推理模式: effort=${reasoningParams.effort}, summary=${summaryType || "未设置"}`);
+        // 测试对话默认使用 medium 努力程度
+        const reasoningParams: Record<string, any> = {
+          effort: "medium",
+        };
+        
+        // 添加 summary 参数（如果配置了且不是 disabled）
+        // OpenAI 不返回原始思维链，但可以返回推理摘要
+        const summaryType = thinkingConfig.reasoningSummary;
+        if (summaryType && summaryType !== "disabled") {
+          reasoningParams.summary = summaryType;
         }
-        // OpenAI 不支持显式禁用推理，不设置 reasoning 参数即可
+        
+        requestBody.reasoning = reasoningParams;
+        console.log(`${logPrefix} OpenAI 推理模式: effort=${reasoningParams.effort}, summary=${summaryType || "未设置"}`);
       } else {
         // 标准格式: 使用 thinking.type 参数
         // 适用于智谱 GLM、DeepSeek 等兼容 API
+        // 测试对话默认启用深度思考
         requestBody.thinking = {
-          type: thinkingEnabled ? "enabled" : "disabled",
+          type: "enabled",
         };
         console.log(`${logPrefix} 标准深度思考: ${requestBody.thinking.type}`);
       }
@@ -575,6 +574,9 @@ app.post("/api/ai/chat/stream", async (c) => {
       messages,
       enableTools = true,
       articleContext,
+      // 深度思考设置（从 AI Chat 面板动态传递）
+      thinkingEnabled,
+      reasoningEffort,
     } = body;
     
     logStep(`请求体解析完成: providerId=${providerId}, modelId=${modelId}, messagesCount=${messages?.length || 0}`);
@@ -723,17 +725,21 @@ app.post("/api/ai/chat/stream", async (c) => {
     }
     
     // 添加深度思考配置
-    if (thinkingConfig?.supported && thinkingConfig?.enabled) {
+    // 深度思考是否启用现在由请求参数 thinkingEnabled 控制（从 AI Chat 面板动态传递）
+    // 而不再从模型配置中读取 thinking.enabled
+    if (thinkingConfig?.supported && thinkingEnabled) {
       const apiFormat = thinkingConfig.apiFormat || "standard";
       
       if (apiFormat === "openai") {
+        // OpenAI 格式：使用请求中传递的 reasoningEffort，默认为 medium
         requestBody.reasoning = {
-          effort: thinkingConfig.reasoningEffort || "medium",
+          effort: reasoningEffort || "medium",
         };
         if (thinkingConfig.reasoningSummary && thinkingConfig.reasoningSummary !== "disabled") {
           requestBody.reasoning.summary = thinkingConfig.reasoningSummary;
         }
       } else {
+        // 标准格式（智谱/DeepSeek）
         requestBody.thinking = { type: "enabled" };
       }
     }

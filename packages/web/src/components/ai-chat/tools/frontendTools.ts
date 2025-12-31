@@ -8,6 +8,8 @@ import type { FrontendToolContext, ToolCallRecord, PendingChange } from "../type
 import { intelligentMatch, normalizeLineEndings, stripLineNumbers, normalizeWhitespace } from "./stringMatcher";
 import { shouldSkipDiff } from "./optimizedDiff";
 
+
+
 // 工具执行结果
 export interface ToolExecutionResult {
   success: boolean;
@@ -129,6 +131,7 @@ export async function executeFrontendTool(
         }
 
         // 返回待确认的变更
+        // 使用 toolCallId 作为 PendingChange.id，确保唯一性（toolCallId 由 AI 模型生成，全局唯一）
         return {
           success: true,
           result: {
@@ -136,7 +139,7 @@ export async function executeFrontendTool(
             requiresConfirmation: true,
           },
           pendingChange: {
-            id: `change_${Date.now()}`,
+            id: toolCallId,
             toolCallId,
             type: "title",
             operation: "update",
@@ -161,6 +164,7 @@ export async function executeFrontendTool(
         }
 
         // 返回待确认的变更
+        // 使用 toolCallId 作为 PendingChange.id，确保唯一性
         return {
           success: true,
           result: {
@@ -169,7 +173,7 @@ export async function executeFrontendTool(
             position,
           },
           pendingChange: {
-            id: `change_${Date.now()}`,
+            id: toolCallId,
             toolCallId,
             type: "content",
             operation: "insert",
@@ -360,6 +364,7 @@ export async function executeFrontendTool(
         const diffCheck = shouldSkipDiff(context.content, newContent, 5 * 1024 * 1024);
 
         // 返回待确认的变更
+        // 使用 toolCallId 作为 PendingChange.id，确保唯一性
         return {
           success: true,
           result: {
@@ -373,7 +378,7 @@ export async function executeFrontendTool(
             diffSkipReason: diffCheck.reason,
           },
           pendingChange: {
-            id: `change_${Date.now()}`,
+            id: toolCallId,
             toolCallId,
             type: "content",
             operation: "replace",
@@ -393,6 +398,7 @@ export async function executeFrontendTool(
         }
 
         // 返回待确认的变更
+        // 使用 toolCallId 作为 PendingChange.id，确保唯一性
         return {
           success: true,
           result: {
@@ -400,7 +406,7 @@ export async function executeFrontendTool(
             requiresConfirmation: true,
           },
           pendingChange: {
-            id: `change_${Date.now()}`,
+            id: toolCallId,
             toolCallId,
             type: "content",
             operation: "replace_all",

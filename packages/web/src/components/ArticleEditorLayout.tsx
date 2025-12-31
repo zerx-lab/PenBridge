@@ -12,6 +12,7 @@ import {
   PanelRightClose,
   PanelRight,
   Bot,
+  Search,
 } from "lucide-react";
 import { Drawer } from "antd";
 import { Button } from "@/components/ui/button";
@@ -27,6 +28,7 @@ import {
 } from "@/components/ui/tooltip";
 import MilkdownEditor, { type MilkdownEditorRef } from "@/components/MilkdownEditor";
 import { TableOfContents, HeadingItem } from "@/components/TableOfContents";
+import { EditorSearchBox } from "@/components/EditorSearchBox";
 import { countWords, formatWordCountDetail } from "@/utils/wordCount";
 import { AIChatPanel } from "@/components/ai-chat/AIChatPanel";
 
@@ -222,6 +224,10 @@ export function ArticleEditorLayout({
     const saved = localStorage.getItem(AI_PANEL_WIDTH_KEY);
     return saved ? parseInt(saved, 10) : AI_PANEL_DEFAULT_WIDTH;
   });
+  
+  // 搜索框状态
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const [initialSearchText, setInitialSearchText] = useState("");
 
   // 内部 ref，如果外部没有提供
   const internalTitleInputRef = useRef<HTMLInputElement>(null);
@@ -288,6 +294,30 @@ export function ArticleEditorLayout({
   useEffect(() => {
     localStorage.setItem(AI_PANEL_WIDTH_KEY, String(aiPanelWidth));
   }, [aiPanelWidth]);
+  
+  // Ctrl+F 搜索快捷键
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Ctrl+F 或 Cmd+F 打开搜索
+      if ((e.ctrlKey || e.metaKey) && e.key === "f") {
+        e.preventDefault();
+        // 获取当前选中的文本
+        const selection = window.getSelection();
+        const selectedText = selection?.toString().trim() || "";
+        setInitialSearchText(selectedText);
+        setIsSearchOpen(true);
+      }
+    };
+    
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
+  
+  // 关闭搜索框
+  const handleSearchClose = useCallback(() => {
+    setIsSearchOpen(false);
+    setInitialSearchText(""); // 清空初始搜索文本
+  }, []);
   
   // 编辑器刷新回调（用于 AI 修改内容后强制刷新编辑器）
   const [refreshKey, setRefreshKey] = useState(0);
@@ -467,6 +497,25 @@ export function ArticleEditorLayout({
           {/* 操作按钮区域 */}
           {actionButtons}
 
+          {/* 搜索按钮 */}
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant={isSearchOpen ? "secondary" : "ghost"}
+                  size="icon"
+                  className="h-8 w-8"
+                  onClick={() => setIsSearchOpen(!isSearchOpen)}
+                >
+                  <Search className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                搜索 (Ctrl+F)
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+
           {/* AI 助手按钮 */}
           <TooltipProvider>
             <Tooltip>
@@ -604,7 +653,14 @@ export function ArticleEditorLayout({
       {/* 主编辑区域 - 全屏沉浸式 */}
       <div className="flex-1 flex overflow-hidden">
         {/* 编辑区域 */}
-        <div className="flex-1 overflow-auto" ref={editorContainerRef}>
+        <div className="flex-1 overflow-auto relative" ref={editorContainerRef}>
+          {/* 搜索框 - 定位在编辑区域右上角 */}
+          <EditorSearchBox
+            isOpen={isSearchOpen}
+            onClose={handleSearchClose}
+            containerRef={editorContainerRef}
+            initialSearchText={initialSearchText}
+          />
           <div
             className={`mx-auto px-6 py-8 transition-all duration-300 ${isSmallFont ? 'text-sm' : ''}`}
             style={{ maxWidth: isFullWidth ? FULL_WIDTH : STANDARD_WIDTH }}
