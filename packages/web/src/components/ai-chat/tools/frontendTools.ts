@@ -278,7 +278,9 @@ export async function executeFrontendTool(
           const newRangeContent = rangeContent.replaceAll(normalizedSearch, normalizedReplace);
 
           occurrences = rangeContent.split(normalizedSearch).length - 1;
-          newContent = [...beforeLines, ...newRangeContent.split('\n'), ...afterLines].join('\n');
+          // 处理空字符串情况：空字符串 split('\n') 返回 ['']，会产生一个空行
+          const newRangeLines = newRangeContent ? newRangeContent.split('\n') : [];
+          newContent = [...beforeLines, ...newRangeLines, ...afterLines].join('\n');
           description = `替换第 ${startLine}-${endLine} 行内的 ${occurrences} 处匹配`;
         } else {
           // 单次替换（已验证唯一性）

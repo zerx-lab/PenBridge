@@ -30,9 +30,11 @@ export function normalizeLineEndings(text: string): string {
 /**
  * 去除行号前缀
  * 匹配格式："  123 | 内容" 或 "  123→内容"
+ * 只匹配 read_article 返回的格式：前面至少有2个空格，行号右对齐
  */
 export function stripLineNumbers(text: string): string {
-  return text.replace(/^\s*\d+\s*[|→]\s*/gm, '');
+  // 只匹配行首有至少2个空格的情况，避免误匹配用户真实内容（如 "1 | 步骤一"）
+  return text.replace(/^[ ]{2,}\d+\s*[|→]\s*/gm, '');
 }
 
 /**
@@ -325,30 +327,31 @@ function findFuzzyMatches(
 ): Array<{ position: number; similarity: number }> {
   const matches: Array<{ position: number; similarity: number }> = [];
   const searchLength = searchText.length;
-  const lines = content.split('\n');
 
-  let currentPosition = 0;
+  // 如果搜索文本过长（超过10KB），跳过模糊匹配以避免性能问题
+  if (searchLength > 10240) {
+    return matches;
+  }
 
-  // 逐行扫描，寻找相似的文本段
-  for (const line of lines) {
-    // 对于每一行，尝试不同的窗口大小
-    for (let start = 0; start <= line.length - searchLength + 50; start++) {
-      const candidate = content.substring(
-        currentPosition + start,
-        currentPosition + start + searchLength
-      );
+  // 使用滑动窗口在整个内容中查找（步长为搜索长度的10%，避免遗漏）
+  const step = Math.max(1, Math.floor(searchLength * 0.1));
+  const maxPosition = content.length - searchLength;
 
-      const similarity = calculateSimilarity(searchText, candidate);
+  for (let pos = 0; pos <= maxPosition; pos += step) {
+    const candidate = content.substring(pos, pos + searchLength);
+    const similarity = calculateSimilarity(searchText, candidate);
 
-      if (similarity >= threshold) {
-        matches.push({
-          position: currentPosition + start,
-          similarity,
-        });
-      }
+    if (similarity >= threshold) {
+      matches.push({
+        position: pos,
+        similarity,
+      });
     }
 
-    currentPosition += line.length + 1; // +1 for newline
+    // 限制最多返回20个匹配，避免性能问题
+    if (matches.length >= 20) {
+      break;
+    }
   }
 
   // 按相似度排序

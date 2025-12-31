@@ -172,6 +172,7 @@ export const frontendToolDefinitions: ToolDefinition[] = [
                 description: "结束行号（包含）",
               },
             },
+            required: ["startLine", "endLine"],
           },
         },
         required: ["search", "replace"],

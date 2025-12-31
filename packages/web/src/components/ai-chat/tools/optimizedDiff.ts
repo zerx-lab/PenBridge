@@ -122,13 +122,13 @@ export function generateOptimizedDiff(
   const maxDisplayLines = options.maxDisplayLines ?? 500;
   const skipIfTooLarge = options.skipIfTooLarge ?? 1024 * 1024; // 1 MB
 
-  // 检查文件大小
-  const oldSize = new Blob([oldText]).size;
-  const newSize = new Blob([newText]).size;
+  // 检查文件大小（使用字符数估算，UTF-16每字符约2字节）
+  const oldSize = oldText.length * 2;
+  const newSize = newText.length * 2;
 
   if (oldSize > skipIfTooLarge || newSize > skipIfTooLarge) {
     console.warn(
-      `[OptimizedDiff] 文件过大（${Math.max(oldSize, newSize)} 字节），跳过 Diff 计算`
+      `[OptimizedDiff] 文件过大（约 ${Math.max(oldSize, newSize)} 字节），跳过 Diff 计算`
     );
     return null;
   }
@@ -335,13 +335,14 @@ export function shouldSkipDiff(
   oldSize: number;
   newSize: number;
 } {
-  const oldSize = new Blob([oldText]).size;
-  const newSize = new Blob([newText]).size;
+  // 使用字符数估算大小（UTF-16每字符约2字节）
+  const oldSize = oldText.length * 2;
+  const newSize = newText.length * 2;
 
   if (oldSize > maxSize || newSize > maxSize) {
     return {
       shouldSkip: true,
-      reason: `文件过大（${Math.max(oldSize, newSize)} 字节 > ${maxSize} 字节）`,
+      reason: `文件过大（约 ${Math.max(oldSize, newSize)} 字节 > ${maxSize} 字节）`,
       oldSize,
       newSize,
     };
