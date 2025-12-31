@@ -15,7 +15,7 @@ services:
     image: ghcr.io/zerohawkeye/penbridge:${VERSION:-latest}
     container_name: pen-bridge
     ports:
-      - "3000:3000"
+      - "127.0.0.1:3000:3000"
     volumes:
       - server-data:/app/data
     environment:
