@@ -63,7 +63,7 @@ export function SchedulePublishDialog({
     if (open) {
       if (existingTask) {
         // 编辑模式：使用已有任务的配置
-        setTagIds(existingTask.config.tagIds);
+        setTagIds(existingTask.config.tagIds || []);
         setSourceType(existingTask.config.sourceType);
         setSummary(existingTask.config.summary || "");
         const taskTime = dayjs(existingTask.scheduledAt);
@@ -133,7 +133,7 @@ export function SchedulePublishDialog({
 
   const handleSubmit = async () => {
     // 验证标签
-    if (tagIds.length === 0) {
+    if (!tagIds || tagIds.length === 0) {
       message.error("请至少选择一个标签");
       return;
     }

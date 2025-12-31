@@ -88,12 +88,14 @@ export function JuejinSchedulePublishDialog({
       if (existingTask) {
         // 编辑模式：使用已有任务的配置
         setCategoryId(existingTask.config.categoryId);
-        const initialTags: TagLabelValue[] = existingTask.config.tagIds.map((id, index) => ({
+        const existingTagIds = existingTask.config.tagIds || [];
+        const existingTagNames = existingTask.config.tagNames || [];
+        const initialTags: TagLabelValue[] = existingTagIds.map((id, index) => ({
           value: id,
-          label: existingTask.config.tagNames?.[index] || id,
+          label: existingTagNames[index] || id,
         }));
         setTags(initialTags);
-        setBriefContent(existingTask.config.briefContent);
+        setBriefContent(existingTask.config.briefContent || "");
         setIsOriginal(existingTask.config.isOriginal);
         const taskTime = dayjs(existingTask.scheduledAt);
         setScheduledDate(taskTime);
@@ -101,9 +103,11 @@ export function JuejinSchedulePublishDialog({
       } else {
         // 新建模式：使用文章的配置
         setCategoryId(initialCategoryId);
-        const initialTags: TagLabelValue[] = initialTagIds.map((id, index) => ({
+        const safeTagIds = initialTagIds || [];
+        const safeTagNames = initialTagNames || [];
+        const initialTags: TagLabelValue[] = safeTagIds.map((id, index) => ({
           value: id,
-          label: initialTagNames[index] || id,
+          label: safeTagNames[index] || id,
         }));
         setTags(initialTags);
         setBriefContent(initialBriefContent);
@@ -173,7 +177,7 @@ export function JuejinSchedulePublishDialog({
     }
 
     // 验证标签
-    if (tags.length === 0) {
+    if (!tags || tags.length === 0) {
       message.error("请至少选择一个标签");
       return;
     }

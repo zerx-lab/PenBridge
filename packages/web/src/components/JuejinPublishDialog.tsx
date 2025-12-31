@@ -70,9 +70,11 @@ export function JuejinPublishDialog({
     if (open) {
       setCategoryId(initialCategoryId);
       // 将 tagIds 和 tagNames 转换为 LabelValue 格式
-      const initialTags: TagLabelValue[] = initialTagIds.map((id, index) => ({
+      const safeTagIds = initialTagIds || [];
+      const safeTagNames = initialTagNames || [];
+      const initialTags: TagLabelValue[] = safeTagIds.map((id, index) => ({
         value: id,
-        label: initialTagNames[index] || id,
+        label: safeTagNames[index] || id,
       }));
       setTags(initialTags);
       setBriefContent(initialBriefContent);
@@ -122,7 +124,7 @@ export function JuejinPublishDialog({
     }
 
     // 验证标签
-    if (tags.length === 0) {
+    if (!tags || tags.length === 0) {
       message.error("请至少选择一个标签");
       return;
     }

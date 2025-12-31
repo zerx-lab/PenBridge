@@ -71,7 +71,7 @@ export function TencentTagSelect({
 
   // 当外部 value 变化且为空时，清空内部状态
   useEffect(() => {
-    if (value.length === 0) {
+    if (!value || value.length === 0) {
       setSelectedLabelValues([]);
     }
   }, [value]);

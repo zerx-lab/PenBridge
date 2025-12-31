@@ -6,6 +6,7 @@ import { ScheduledTask } from "../entities/ScheduledTask";
 import { EmailConfig } from "../entities/EmailConfig";
 import { AdminUser } from "../entities/AdminUser";
 import { AdminSession } from "../entities/AdminSession";
+import { AIProvider, AIModel } from "../entities/AIProvider";
 // @ts-ignore
 import initSqlJs from "sql.js";
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from "fs";
@@ -24,7 +25,7 @@ export const AppDataSource = new DataSource({
   database: existsSync(DB_PATH) ? readFileSync(DB_PATH) : undefined,
   synchronize: true, // 自动迁移数据模型
   logging: false,
-  entities: [User, Article, Folder, ScheduledTask, EmailConfig, AdminUser, AdminSession],
+  entities: [User, Article, Folder, ScheduledTask, EmailConfig, AdminUser, AdminSession, AIProvider, AIModel],
   driver: await initSqlJs(),
   autoSave: true,
   autoSaveCallback: (data: Uint8Array) => {

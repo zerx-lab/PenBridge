@@ -102,7 +102,7 @@ export function TencentPublishDialog({
 
   const handlePublish = async () => {
     // 验证标签
-    if (tagIds.length === 0) {
+    if (!tagIds || tagIds.length === 0) {
       message.error("请至少选择一个标签");
       return;
     }
