@@ -133,7 +133,7 @@ jobs:
             electron/assets/icon.icns
           retention-days: 1
 
-  # 构建 Docker 镜像
+  # 构建 Docker 镜像（包含前端和后端）
   build-docker:
     needs: prepare
     runs-on: ubuntu-latest
@@ -171,7 +171,8 @@ jobs:
       - name: Build and push Docker image
         uses: docker/build-push-action@v6
         with:
-          context: ./packages/server
+          # 从项目根目录构建，以包含前端和后端
+          context: .
           file: ./packages/server/Dockerfile
           push: true
           tags: ${{ steps.meta.outputs.tags }}

@@ -1,0 +1,51 @@
+# Git
+.git
+.gitignore
+
+# Electron 应用（Docker 不需要）
+electron
+
+# 依赖目录（将在容器内重新安装）
+node_modules
+packages/*/node_modules
+
+# 构建产物（将在容器内重新构建）
+packages/*/dist
+
+# 本地数据（不应包含在镜像中）
+packages/server/data
+data
+
+# 开发文件
+*.log
+.env
+.env.*
+
+# IDE
+.idea
+.vscode
+*.swp
+*.swo
+
+# 测试
+__tests__
+*.test.ts
+*.spec.ts
+coverage
+
+# TypeScript 缓存
+*.tsbuildinfo
+
+# macOS
+.DS_Store
+
+# Windows
+Thumbs.db
+
+# GitHub
+.github
+
+# 文档
+docs
+*.md
+!packages/web/README.md

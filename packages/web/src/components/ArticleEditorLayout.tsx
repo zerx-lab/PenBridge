@@ -5,13 +5,16 @@ import {
   ChevronRight,
   Settings2,
   Maximize2,
-  Minimize2,
+  Type,
+  List,
+  Hash,
+  FileText,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Skeleton } from "@/components/ui/skeleton";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Tooltip,
   TooltipContent,
@@ -21,7 +24,6 @@ import {
 import {
   Sheet,
   SheetContent,
-  SheetDescription,
   SheetHeader,
   SheetTitle,
   SheetTrigger,
@@ -39,36 +41,36 @@ function EditorSkeleton() {
         <Skeleton className="h-4 w-[95%]" />
         <Skeleton className="h-4 w-[88%]" />
       </div>
-      
+
       {/* 空行 */}
       <div className="h-2" />
-      
+
       {/* 模拟第二段 */}
       <div className="space-y-2">
         <Skeleton className="h-4 w-[92%]" />
         <Skeleton className="h-4 w-full" />
         <Skeleton className="h-4 w-[75%]" />
       </div>
-      
+
       {/* 空行 */}
       <div className="h-2" />
-      
+
       {/* 模拟代码块或引用 */}
       <div className="pl-4 border-l-2 border-muted space-y-2">
         <Skeleton className="h-4 w-[85%]" />
         <Skeleton className="h-4 w-[70%]" />
       </div>
-      
+
       {/* 空行 */}
       <div className="h-2" />
-      
+
       {/* 模拟第三段 */}
       <div className="space-y-2">
         <Skeleton className="h-4 w-[90%]" />
         <Skeleton className="h-4 w-[82%]" />
         <Skeleton className="h-4 w-[60%]" />
       </div>
-      
+
       {/* 加载提示 */}
       <div className="flex items-center gap-2 pt-4 text-sm text-muted-foreground">
         <div className="h-1 w-1 rounded-full bg-muted-foreground/50 animate-pulse" />
@@ -80,10 +82,49 @@ function EditorSkeleton() {
   );
 }
 
+// Notion 风格设置项组件
+interface SettingItemProps {
+  icon: ReactNode;
+  label: string;
+  description?: string;
+  action?: ReactNode;
+  onClick?: () => void;
+}
+
+function SettingItem({ icon, label, description, action, onClick }: SettingItemProps) {
+  const content = (
+    <div className="flex items-center justify-between py-2.5 px-2 rounded-md hover:bg-accent/50 transition-colors group -mx-2">
+      <div className="flex items-center gap-3">
+        <span className="text-muted-foreground group-hover:text-foreground transition-colors">
+          {icon}
+        </span>
+        <span className="text-sm">{label}</span>
+      </div>
+      {action && <div className="flex items-center">{action}</div>}
+      {description && !action && (
+        <span className="text-sm text-muted-foreground">{description}</span>
+      )}
+    </div>
+  );
+
+  if (onClick) {
+    return (
+      <button className="w-full text-left" onClick={onClick}>
+        {content}
+      </button>
+    );
+  }
+
+  return content;
+}
+
 // 编辑器宽度设置
 const WIDTH_STORAGE_KEY = "editor-fullwidth-preference";
+const SMALL_FONT_KEY = "editor-small-font-preference";
+const SHOW_TOC_KEY = "editor-show-toc-preference";
+const AUTO_HEADING_NUMBER_KEY = "editor-auto-heading-number-preference";
 const STANDARD_WIDTH = "768px";
-const FULL_WIDTH = "100%";
+const FULL_WIDTH = "85%";
 
 export interface ArticleEditorLayoutProps {
   // 文章数据
@@ -91,29 +132,29 @@ export interface ArticleEditorLayoutProps {
   content: string;
   onTitleChange: (title: string) => void;
   onContentChange: (content: string) => void;
-  
+
   // 面包屑配置
   breadcrumbLabel: string;
-  
+
   // 状态相关
   isPublished?: boolean;
   statusIndicator?: ReactNode;
-  
+
   // 内容加载状态（用于显示骨架屏）
   isContentLoading?: boolean;
-  
+
   // 操作按钮区域（保存、发布等）
   actionButtons: ReactNode;
-  
+
   // 设置弹窗额外内容
   settingsContent?: ReactNode;
-  
+
   // 可选：标题输入框 ref（用于新建后聚焦）
   titleInputRef?: React.RefObject<HTMLInputElement | null>;
-  
+
   // 可选：编辑器 key（用于强制重新渲染）
   editorKey?: number;
-  
+
   // 可选：文章 ID（用于图片上传）
   articleId?: number;
 }
@@ -139,15 +180,39 @@ export function ArticleEditorLayout({
     const saved = localStorage.getItem(WIDTH_STORAGE_KEY);
     return saved === "true";
   });
-  
+  const [isSmallFont, setIsSmallFont] = useState(() => {
+    const saved = localStorage.getItem(SMALL_FONT_KEY);
+    return saved === "true";
+  });
+  const [showToc, setShowToc] = useState(() => {
+    const saved = localStorage.getItem(SHOW_TOC_KEY);
+    return saved === "true";
+  });
+  const [autoHeadingNumber, setAutoHeadingNumber] = useState(() => {
+    const saved = localStorage.getItem(AUTO_HEADING_NUMBER_KEY);
+    return saved === "true";
+  });
+
   // 内部 ref，如果外部没有提供
   const internalTitleInputRef = useRef<HTMLInputElement>(null);
   const titleInputRef = externalTitleInputRef || internalTitleInputRef;
 
-  // 保存宽度偏好到 localStorage
+  // 保存偏好到 localStorage
   useEffect(() => {
     localStorage.setItem(WIDTH_STORAGE_KEY, String(isFullWidth));
   }, [isFullWidth]);
+
+  useEffect(() => {
+    localStorage.setItem(SMALL_FONT_KEY, String(isSmallFont));
+  }, [isSmallFont]);
+
+  useEffect(() => {
+    localStorage.setItem(SHOW_TOC_KEY, String(showToc));
+  }, [showToc]);
+
+  useEffect(() => {
+    localStorage.setItem(AUTO_HEADING_NUMBER_KEY, String(autoHeadingNumber));
+  }, [autoHeadingNumber]);
 
   // 计算字数统计
   const wordCount = useMemo(() => {
@@ -199,65 +264,100 @@ export function ArticleEditorLayout({
                 <Settings2 className="h-4 w-4" />
               </Button>
             </SheetTrigger>
-            <SheetContent className="w-[340px] p-0">
+            <SheetContent className="w-[300px] p-0 border-l top-8 h-[calc(100%-32px)]">
               <div className="flex flex-col h-full">
-                {/* 头部 */}
-                <div className="px-6 py-5 border-b bg-muted/30">
-                  <SheetHeader className="space-y-1">
-                    <SheetTitle className="text-lg font-semibold">编辑器设置</SheetTitle>
-                    <SheetDescription className="text-sm">
-                      自定义您的编辑体验
-                    </SheetDescription>
-                  </SheetHeader>
-                </div>
+                {/* 标题头部 */}
+                <SheetHeader className="px-4 py-3 border-b">
+                  <SheetTitle className="text-sm font-medium">页面设置</SheetTitle>
+                </SheetHeader>
 
-                {/* 设置内容 */}
-                <div className="flex-1 px-6 py-6 overflow-auto">
-                  <div className="space-y-6">
-                    {/* 显示设置分组 */}
-                    <div className="space-y-4">
-                      <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">
-                        显示
-                      </h3>
-
-                      {/* 全宽模式 */}
-                      <div className="flex items-center justify-between p-4 rounded-lg border bg-card hover:bg-accent/50 transition-colors">
-                        <div className="flex items-center gap-3">
-                          <div className="flex items-center justify-center w-10 h-10 rounded-lg bg-primary/10">
-                            {isFullWidth ? (
-                              <Maximize2 className="h-5 w-5 text-primary" />
-                            ) : (
-                              <Minimize2 className="h-5 w-5 text-primary" />
-                            )}
-                          </div>
-                          <div className="space-y-0.5">
-                            <Label htmlFor="fullwidth" className="text-sm font-medium cursor-pointer">
-                              全宽模式
-                            </Label>
-                            <p className="text-xs text-muted-foreground">
-                              {isFullWidth ? "编辑区域占满屏幕宽度" : "标准宽度 (768px)"}
-                            </p>
-                          </div>
-                        </div>
+                {/* 设置内容 - Notion 风格 */}
+                <ScrollArea className="flex-1">
+                  <div className="px-4 py-3 space-y-1">
+                    {/* 自适应宽度 */}
+                    <SettingItem
+                      icon={<Maximize2 className="h-4 w-4" />}
+                      label="自适应宽度"
+                      action={
                         <Switch
-                          id="fullwidth"
                           checked={isFullWidth}
                           onCheckedChange={setIsFullWidth}
+                          className="scale-90"
                         />
+                      }
+                    />
+
+                    {/* 小字体 */}
+                    <SettingItem
+                      icon={<Type className="h-4 w-4" />}
+                      label="小字体"
+                      action={
+                        <Switch
+                          checked={isSmallFont}
+                          onCheckedChange={setIsSmallFont}
+                          className="scale-90"
+                        />
+                      }
+                    />
+
+                    {/* 标题目录 */}
+                    <SettingItem
+                      icon={<List className="h-4 w-4" />}
+                      label="标题目录"
+                      action={
+                        <Switch
+                          checked={showToc}
+                          onCheckedChange={setShowToc}
+                          className="scale-90"
+                        />
+                      }
+                    />
+
+                    {/* 标题自动编号 */}
+                    <SettingItem
+                      icon={<Hash className="h-4 w-4" />}
+                      label="标题自动编号"
+                      action={
+                        <Switch
+                          checked={autoHeadingNumber}
+                          onCheckedChange={setAutoHeadingNumber}
+                          className="scale-90"
+                        />
+                      }
+                    />
+
+                    {/* 分隔线 */}
+                    <div className="my-2 border-t" />
+
+                    {/* 额外设置内容（如导入 Word） */}
+                    {settingsContent}
+
+                    {/* 分隔线 */}
+                    <div className="my-2 border-t" />
+
+                    {/* 统计信息区域 */}
+                    <div className="py-2">
+                      <div className="flex items-center gap-3 mb-2 px-2 -mx-2">
+                        <FileText className="h-4 w-4 text-muted-foreground" />
+                        <span className="text-sm text-muted-foreground">统计信息</span>
+                      </div>
+                      <div className="ml-7 space-y-1.5 text-sm text-muted-foreground">
+                        <div className="flex justify-between">
+                          <span>总字数:</span>
+                          <span className="text-foreground">{totalWords}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span>段落数:</span>
+                          <span className="text-foreground">{wordCount.paragraphs}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span>行数:</span>
+                          <span className="text-foreground">{wordCount.lines}</span>
+                        </div>
                       </div>
                     </div>
-
-                    {/* 额外设置内容 */}
-                    {settingsContent}
                   </div>
-                </div>
-
-                {/* 底部提示 */}
-                <div className="px-6 py-4 border-t bg-muted/20">
-                  <p className="text-xs text-muted-foreground text-center">
-                    设置会自动保存
-                  </p>
-                </div>
+                </ScrollArea>
               </div>
             </SheetContent>
           </Sheet>
@@ -267,7 +367,7 @@ export function ArticleEditorLayout({
       {/* 主编辑区域 - 全屏沉浸式 */}
       <div className="flex-1 overflow-auto">
         <div
-          className="mx-auto px-6 py-8 transition-all duration-300"
+          className={`mx-auto px-6 py-8 transition-all duration-300 ${isSmallFont ? 'text-sm' : ''}`}
           style={{ maxWidth: isFullWidth ? FULL_WIDTH : STANDARD_WIDTH }}
         >
           {/* 标题输入 - Notion 风格 */}
@@ -276,8 +376,12 @@ export function ArticleEditorLayout({
             placeholder="无标题"
             value={title}
             onChange={(e) => onTitleChange(e.target.value)}
-            className="w-full bg-transparent font-normal py-0 px-0 border-0 outline-none placeholder:text-muted-foreground/40"
-            style={{ fontSize: '30px', lineHeight: '1.2', fontWeight: '550' }}
+            className={`w-full bg-transparent font-normal py-0 px-0 border-0 outline-none placeholder:text-muted-foreground/40 ${isSmallFont ? 'text-2xl' : ''}`}
+            style={{ 
+              fontSize: isSmallFont ? undefined : '30px', 
+              lineHeight: '1.2', 
+              fontWeight: '550' 
+            }}
           />
           <div className="h-px bg-border/40 mt-3 mb-4" />
 

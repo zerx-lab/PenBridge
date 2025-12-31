@@ -1,5 +1,5 @@
 # PenBridge 多平台文章管理与发布工具 - Docker Compose 配置
-# 用于本地开发和测试
+# 包含前端和后端的完整部署
 #
 # 使用方法：
 #   构建并启动：docker-compose up -d --build
@@ -14,8 +14,9 @@
 services:
   server:
     build:
-      context: ./packages/server
-      dockerfile: Dockerfile
+      # 需要从项目根目录构建，以包含前端和后端
+      context: .
+      dockerfile: packages/server/Dockerfile
     # 本地构建时使用此镜像名，生产环境请使用 ghcr.io/zerohawkeye/penbridge:版本号
     image: pen-bridge:local
     container_name: pen-bridge
@@ -36,7 +37,7 @@ services:
           "--no-verbose",
           "--tries=1",
           "--spider",
-          "http://localhost:3000/",
+          "http://localhost:3000/health",
         ]
       interval: 30s
       timeout: 10s
@@ -46,16 +47,3 @@ services:
 volumes:
   server-data:
     name: pen-bridge-data
-
-# 可选：如果需要与前端一起部署，取消下面的注释
-# services:
-#   web:
-#     build:
-#       context: .
-#       dockerfile: packages/web/Dockerfile
-#     container_name: pen-bridge-web
-#     ports:
-#       - "80:80"
-#     depends_on:
-#       - server
-#     restart: unless-stopped

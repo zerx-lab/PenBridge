@@ -6,9 +6,12 @@ import { appRouter } from "./trpc/router";
 import { initDatabase } from "./db";
 import { schedulerService } from "./services/scheduler";
 import { initializeSuperAdmin, cleanupExpiredSessions } from "./services/adminAuth";
-import { mkdirSync, existsSync, writeFileSync } from "fs";
+import { mkdirSync, existsSync, writeFileSync, readFileSync } from "fs";
 import { join } from "path";
 import { randomUUID } from "crypto";
+
+// 前端静态文件目录（Docker 部署时使用）
+const PUBLIC_DIR = "public";
 
 const app = new Hono();
 
@@ -53,8 +56,12 @@ app.use(
   })
 );
 
-// Health check
-app.get("/", (c) => c.json({ status: "ok", message: "Tencent Dev Blog Server" }));
+// Health check - 仅在没有前端静态文件时显示 JSON
+// 如果有前端，健康检查通过返回 200 的 HTML 页面也可以
+app.get("/health", (c) => c.json({ status: "ok", message: "PenBridge Server" }));
+
+// API 根路径
+app.get("/api", (c) => c.json({ status: "ok", message: "PenBridge API" }));
 
 // 静态文件服务 - 提供上传的图片访问
 app.use("/uploads/*", serveStatic({ root: "./data" }));
@@ -128,6 +135,23 @@ app.use(
     },
   })
 );
+
+// 前端静态文件服务（生产环境 Docker 部署时使用）
+// 检查 public 目录是否存在，如果存在则提供前端静态文件服务
+if (existsSync(PUBLIC_DIR)) {
+  // 静态资源文件（js, css, 图片等）
+  app.use("/*", serveStatic({ root: PUBLIC_DIR }));
+
+  // SPA 回退：所有未匹配的路由返回 index.html
+  app.get("*", async (c) => {
+    const indexPath = join(PUBLIC_DIR, "index.html");
+    if (existsSync(indexPath)) {
+      const html = readFileSync(indexPath, "utf-8");
+      return c.html(html);
+    }
+    return c.json({ error: "Not found" }, 404);
+  });
+}
 
 // 初始化
 async function main() {

@@ -11,6 +11,33 @@ export function isElectron(): boolean {
 }
 
 /**
+ * 检测是否在 Docker 部署模式下（前后端同源部署）
+ * 通过检测 /health 端点是否在当前域名下可访问来判断
+ */
+async function detectDockerDeployment(): Promise<boolean> {
+  try {
+    const currentOrigin = window.location.origin;
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 2000);
+    
+    const response = await fetch(`${currentOrigin}/health`, {
+      method: "GET",
+      signal: controller.signal,
+    });
+    
+    clearTimeout(timeoutId);
+    
+    if (response.ok) {
+      const data = await response.json();
+      return data.status === "ok";
+    }
+    return false;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * 获取服务器基础 URL
  * Electron 环境从 electron-store 获取，浏览器环境从 localStorage 获取
  * 如果未配置，返回空字符串
@@ -93,8 +120,8 @@ export async function testServerConnection(baseUrl: string): Promise<{ success: 
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 5000);
 
-    // 使用根路径的健康检查端点
-    const response = await fetch(`${url}/`, {
+    // 使用 /health 健康检查端点
+    const response = await fetch(`${url}/health`, {
       method: "GET",
       signal: controller.signal,
     });
@@ -120,7 +147,9 @@ export async function testServerConnection(baseUrl: string): Promise<{ success: 
 }
 
 /**
- * 初始化服务器配置（Electron 环境下同步配置到 localStorage）
+ * 初始化服务器配置
+ * - Electron 环境下同步配置到 localStorage
+ * - 浏览器环境下检测是否为 Docker 部署（前后端同源），自动配置
  */
 export async function initServerConfig(): Promise<void> {
   if (isElectron()) {
@@ -128,6 +157,20 @@ export async function initServerConfig(): Promise<void> {
     if (config.isConfigured && config.baseUrl) {
       localStorage.setItem(SERVER_BASE_URL_KEY, config.baseUrl);
       localStorage.setItem(SERVER_CONFIGURED_KEY, "true");
+    }
+    return;
+  }
+  
+  // 浏览器环境：如果未配置，尝试检测 Docker 部署模式
+  const configured = localStorage.getItem(SERVER_CONFIGURED_KEY) === "true";
+  if (!configured) {
+    const isDocker = await detectDockerDeployment();
+    if (isDocker) {
+      // Docker 部署模式，自动使用当前域名
+      const currentOrigin = window.location.origin;
+      localStorage.setItem(SERVER_BASE_URL_KEY, currentOrigin);
+      localStorage.setItem(SERVER_CONFIGURED_KEY, "true");
+      console.log("检测到 Docker 部署模式，自动配置服务器地址:", currentOrigin);
     }
   }
 }

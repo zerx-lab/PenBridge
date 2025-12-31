@@ -1,8 +1,11 @@
 # 生产部署 Dockerfile - 直接使用已构建的产物
 # 
 # 使用方法：
-#   1. 本地先执行 bun run build:server
-#   2. 上传 packages/server/dist/index.js 和此 Dockerfile 到服务器
+#   1. 本地先执行 bun run build
+#   2. 上传以下文件到服务器：
+#      - packages/server/dist/index.js
+#      - packages/web/dist/ (整个目录)
+#      - 此 Dockerfile
 #   3. docker build -t pen-bridge:v1 -f Dockerfile.prod .
 #   4. docker run -d -p 3000:3000 -v pen-bridge-data:/app/data pen-bridge:v1
 
@@ -16,8 +19,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     wget \
     && rm -rf /var/lib/apt/lists/*
 
-# 复制已构建的产物
-COPY dist/index.js ./index.js
+# 复制已构建的后端产物
+COPY packages/server/dist/index.js ./index.js
+
+# 复制已构建的前端产物到 public 目录
+COPY packages/web/dist ./public
 
 # 创建数据目录
 RUN mkdir -p /app/data/uploads && chmod -R 755 /app/data
@@ -31,7 +37,7 @@ ENV PORT=3000
 
 # 健康检查
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD wget --no-verbose --tries=1 --spider http://localhost:3000/ || exit 1
+    CMD wget --no-verbose --tries=1 --spider http://localhost:3000/health || exit 1
 
 # 启动命令
 CMD ["bun", "run", "index.js"]
