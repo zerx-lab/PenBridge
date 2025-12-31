@@ -5,7 +5,7 @@
  */
 
 import type { FrontendToolContext, ToolCallRecord, PendingChange } from "../types";
-import { intelligentMatch, normalizeLineEndings, stripLineNumbers } from "./stringMatcher";
+import { intelligentMatch, normalizeLineEndings, stripLineNumbers, normalizeWhitespace } from "./stringMatcher";
 import { shouldSkipDiff } from "./optimizedDiff";
 
 // 工具执行结果
@@ -186,6 +186,11 @@ export async function executeFrontendTool(
           return { success: false, error: "缺少 search 或 replace 参数" };
         }
 
+        // 验证搜索文本不能为空（空字符串会导致 split 行为异常）
+        if (args.search.trim() === "") {
+          return { success: false, error: "搜索文本不能为空或仅包含空白字符" };
+        }
+
         // 使用智能匹配
         const matchResult = intelligentMatch(context.content, args.search, {
           requireUnique: !args.replaceAll,
@@ -318,9 +323,12 @@ export async function executeFrontendTool(
           if (matchResult.strategy === 'exact' || matchResult.strategy === 'normalized-lines') {
             // 精确匹配或标准化行匹配，可以直接用 replace
             newContent = normalizedContent.replace(normalizedSearch, normalizedReplace);
-          } else {
-            // 模糊匹配或空白字符标准化匹配，使用位置精确替换
-            // matchResult.position 是在原始content中的位置，需要在原始内容中替换
+          } else if (matchResult.strategy === 'normalized-whitespace' || matchResult.strategy === 'fuzzy') {
+            // 对于空白字符标准化和模糊匹配，由于位置映射复杂，回退到完整内容替换
+            // 这些策略的 position 在经过多次标准化的content中，难以准确映射回原始位置
+            // 为安全起见，使用全局唯一匹配替换（intelligentMatch 已验证唯一性）
+
+            // 在 normalized content 中查找实际匹配的文本
             if (matchResult.position === undefined) {
               return {
                 success: false,
@@ -328,15 +336,26 @@ export async function executeFrontendTool(
               };
             }
 
-            // 确定实际匹配的内容长度（模糊匹配时长度等于搜索文本）
-            const searchLength = normalizeLineEndings(args.search).length;
+            // 根据策略确定在哪个版本的content中查找
+            const workingContent = matchResult.strategy === 'normalized-whitespace'
+              ? normalizeWhitespace(normalizedContent)
+              : normalizedContent;
 
-            // 在原始内容中使用位置替换
-            const beforeMatch = context.content.substring(0, matchResult.position);
-            const afterMatch = context.content.substring(matchResult.position + searchLength);
+            // 使用模糊搜索文本的长度作为匹配长度
+            const matchedLength = normalizeLineEndings(args.search).length;
+            const matchedText = workingContent.substring(
+              matchResult.position,
+              matchResult.position + matchedLength
+            );
 
-            // 组合并标准化换行符
-            newContent = normalizeLineEndings(beforeMatch + args.replace + afterMatch);
+            // 在 normalized content 中替换（使用实际匹配到的文本）
+            newContent = normalizedContent.replace(matchedText, normalizedReplace);
+          } else {
+            // 未知策略，返回错误
+            return {
+              success: false,
+              error: `不支持的匹配策略: ${matchResult.strategy}`,
+            };
           }
 
           description = `替换匹配的内容（${matchResult.strategy} 策略）`;

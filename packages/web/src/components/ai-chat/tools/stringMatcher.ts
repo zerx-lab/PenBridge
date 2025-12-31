@@ -206,12 +206,16 @@ export function intelligentMatch(
 
   const normalizedPositions = findAllOccurrences(normalizedContent, cleanedSearch);
   if (normalizedPositions.length === 1) {
+    // normalizedContent 和 content 只差在换行符，位置应该相同（因为normalizeLineEndings不改变位置）
+    // 如果 content 本身就是 LF，position 完全相同；如果有 CRLF，需要映射
+    // 简化处理：直接在 normalized 版本中查找，后续替换也用 normalized 版本
     return {
       found: true,
       position: normalizedPositions[0],
       strategy: 'normalized-lines',
       confidence: 0.95,
       warnings,
+      // 注意：此位置是在 normalizedContent 中的，使用时需要在 normalized content 中操作
     };
   }
 
