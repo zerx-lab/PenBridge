@@ -240,121 +240,228 @@ a .text-foreground,
   outline: none;
 }
 
-/* 斜杠命令菜单美化 - Notion 风格 */
-.milkdown-editor .crepe-slash-menu {
-  background: var(--popover);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1), 0 0 0 1px rgb(0 0 0 / 0.05);
-  overflow: hidden;
-  min-width: 280px;
-  max-height: 400px;
-  overflow-y: auto;
+/* ==================== Toolbar 工具栏美化 - 现代风格 ==================== */
+.milkdown .milkdown-toolbar {
+  background: var(--popover) !important;
+  border: 1px solid var(--border) !important;
+  border-radius: 10px !important;
+  box-shadow: 
+    0 4px 6px -1px rgb(0 0 0 / 0.08),
+    0 2px 4px -2px rgb(0 0 0 / 0.05),
+    0 0 0 1px rgb(0 0 0 / 0.03) !important;
+  padding: 4px !important;
+  gap: 2px !important;
+  backdrop-filter: blur(8px);
 }
 
-/* 斜杠菜单分组标题 */
-.milkdown-editor .crepe-slash-menu-group-label {
-  font-size: 11px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: var(--muted-foreground);
-  padding: 8px 12px 4px;
-  margin: 0;
+.milkdown .milkdown-toolbar .toolbar-item {
+  width: 28px !important;
+  height: 28px !important;
+  margin: 2px !important;
+  padding: 4px !important;
+  border-radius: 6px !important;
+  transition: all 0.15s ease !important;
 }
 
-/* 斜杠菜单项 */
-.milkdown-editor .crepe-slash-menu-item {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 8px 12px;
-  cursor: pointer;
-  transition: background-color 0.15s ease;
-  border-radius: 0;
+.milkdown .milkdown-toolbar .toolbar-item:hover {
+  background: var(--accent) !important;
 }
 
-.milkdown-editor .crepe-slash-menu-item:hover,
-.milkdown-editor .crepe-slash-menu-item[data-selected="true"] {
-  background-color: var(--accent);
+.milkdown .milkdown-toolbar .toolbar-item:active {
+  background: var(--accent) !important;
+  transform: scale(0.95);
 }
 
-/* 斜杠菜单图标 */
-.milkdown-editor .crepe-slash-menu-item-icon {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 40px;
-  height: 40px;
-  border-radius: var(--radius);
-  background: var(--secondary);
-  flex-shrink: 0;
+.milkdown .milkdown-toolbar .toolbar-item svg {
+  width: 18px !important;
+  height: 18px !important;
+  color: var(--muted-foreground) !important;
+  fill: var(--muted-foreground) !important;
+  transition: color 0.15s ease !important;
 }
 
-/* 斜杠菜单文本 */
-.milkdown-editor .crepe-slash-menu-item-content {
-  flex: 1;
-  min-width: 0;
+.milkdown .milkdown-toolbar .toolbar-item:hover svg {
+  color: var(--foreground) !important;
+  fill: var(--foreground) !important;
 }
 
-.milkdown-editor .crepe-slash-menu-item-title {
-  font-size: 14px;
-  font-weight: 500;
-  color: var(--foreground);
-  margin-bottom: 2px;
+.milkdown .milkdown-toolbar .toolbar-item.active svg {
+  color: oklch(0.55 0.2 250) !important;
+  fill: oklch(0.55 0.2 250) !important;
 }
 
-.milkdown-editor .crepe-slash-menu-item-description {
-  font-size: 12px;
-  color: var(--muted-foreground);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+.milkdown .milkdown-toolbar .divider {
+  width: 1px !important;
+  height: 18px !important;
+  margin: 7px 4px !important;
+  background: var(--border) !important;
 }
 
-/* 工具栏美化 */
-.milkdown-editor .crepe-toolbar {
-  background: var(--popover);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
-  padding: 4px;
-  gap: 2px;
+/* ==================== Slash Menu 斜杠菜单美化 - 紧凑双列布局 ==================== */
+.milkdown .milkdown-slash-menu {
+  background: var(--popover) !important;
+  border: 1px solid var(--border) !important;
+  border-radius: 12px !important;
+  box-shadow: 
+    0 10px 38px -10px rgb(0 0 0 / 0.15),
+    0 10px 20px -15px rgb(0 0 0 / 0.1) !important;
+  overflow: hidden !important;
+  width: 320px !important;
+  backdrop-filter: blur(12px);
+  animation: slash-menu-appear 0.15s ease-out;
 }
 
-.milkdown-editor .crepe-toolbar-button {
-  border-radius: var(--radius-sm);
-  padding: 6px;
-  transition: background-color 0.15s ease;
+@keyframes slash-menu-appear {
+  from {
+    opacity: 0;
+    transform: translateY(-8px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
 }
 
-.milkdown-editor .crepe-toolbar-button:hover {
-  background-color: var(--accent);
+/* 隐藏顶部 Tab 切换栏，让菜单更紧凑 */
+.milkdown .milkdown-slash-menu .tab-group {
+  display: none !important;
 }
 
-.milkdown-editor .crepe-toolbar-button[data-active="true"] {
-  background-color: var(--accent);
-  color: var(--accent-foreground);
+/* 菜单内容区域 */
+.milkdown .milkdown-slash-menu .menu-groups {
+  padding: 6px !important;
+  max-height: 380px !important;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
 }
 
-/* 块编辑手柄样式 */
-.milkdown-editor .crepe-block-handle {
-  opacity: 0;
-  transition: opacity 0.15s ease;
+/* 分组标题样式 - 紧凑 */
+.milkdown .milkdown-slash-menu .menu-groups .menu-group h6 {
+  font-size: 11px !important;
+  font-weight: 500 !important;
+  text-transform: none !important;
+  color: var(--muted-foreground) !important;
+  padding: 8px 8px 4px !important;
+  margin: 0 !important;
+  letter-spacing: 0 !important;
 }
 
-.milkdown-editor:hover .crepe-block-handle,
-.milkdown-editor .crepe-block-handle:focus-within {
-  opacity: 1;
+/* 菜单项列表 - 双列布局 */
+.milkdown .milkdown-slash-menu .menu-groups .menu-group ul {
+  display: grid !important;
+  grid-template-columns: 1fr 1fr !important;
+  gap: 2px !important;
+  padding: 0 !important;
 }
 
-/* 链接提示框 */
-.milkdown-editor .crepe-link-tooltip {
-  background: var(--popover);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);
-  padding: 8px 12px;
+/* 菜单项样式 - 紧凑设计 */
+.milkdown .milkdown-slash-menu .menu-groups .menu-group li {
+  min-width: 0 !important;
+  display: flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+  padding: 6px 8px !important;
+  border-radius: 6px !important;
+  cursor: pointer !important;
+  transition: all 0.12s ease !important;
+}
+
+.milkdown .milkdown-slash-menu .menu-groups .menu-group li:hover,
+.milkdown .milkdown-slash-menu .menu-groups .menu-group li.hover {
+  background: var(--accent) !important;
+}
+
+.milkdown .milkdown-slash-menu .menu-groups .menu-group li.active {
+  background: oklch(0.55 0.2 250 / 0.1) !important;
+}
+
+/* 图标样式 - 更小更精致 */
+.milkdown .milkdown-slash-menu .menu-groups .menu-group li svg {
+  width: 16px !important;
+  height: 16px !important;
+  color: var(--muted-foreground) !important;
+  fill: var(--muted-foreground) !important;
+  flex-shrink: 0 !important;
+  transition: color 0.12s ease !important;
+}
+
+.milkdown .milkdown-slash-menu .menu-groups .menu-group li:hover svg,
+.milkdown .milkdown-slash-menu .menu-groups .menu-group li.hover svg {
+  color: var(--foreground) !important;
+  fill: var(--foreground) !important;
+}
+
+/* 文字样式 - 紧凑 */
+.milkdown .milkdown-slash-menu .menu-groups .menu-group li > span {
+  font-size: 13px !important;
+  font-weight: 400 !important;
+  color: var(--foreground) !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  line-height: 1.4 !important;
+}
+
+/* 分组分割线 - 更淡 */
+.milkdown .milkdown-slash-menu .menu-groups .menu-group + .menu-group::before {
+  display: block !important;
+  content: '' !important;
+  height: 1px !important;
+  background: var(--border) !important;
+  margin: 6px 8px !important;
+  opacity: 0.6 !important;
+}
+
+/* ==================== Block Handle 块编辑手柄美化 ==================== */
+.milkdown .milkdown-block-handle {
+  gap: 1px !important;
+  transition: opacity 0.2s ease !important;
+}
+
+.milkdown .milkdown-block-handle .operation-item {
+  width: 24px !important;
+  height: 24px !important;
+  padding: 4px !important;
+  border-radius: 4px !important;
+  transition: all 0.15s ease !important;
+}
+
+.milkdown .milkdown-block-handle .operation-item svg {
+  width: 16px !important;
+  height: 16px !important;
+  color: var(--muted-foreground) !important;
+  fill: var(--muted-foreground) !important;
+}
+
+.milkdown .milkdown-block-handle .operation-item:hover {
+  background: var(--accent) !important;
+}
+
+.milkdown .milkdown-block-handle .operation-item:hover svg {
+  color: var(--foreground) !important;
+  fill: var(--foreground) !important;
+}
+
+.milkdown .milkdown-block-handle .operation-item.active {
+  background: oklch(0.55 0.2 250 / 0.15) !important;
+}
+
+.milkdown .milkdown-block-handle .operation-item.active svg {
+  color: oklch(0.55 0.2 250) !important;
+  fill: oklch(0.55 0.2 250) !important;
+}
+
+/* ==================== Link Tooltip 链接提示框美化 ==================== */
+.milkdown .milkdown-link-preview,
+.milkdown .milkdown-link-edit {
+  background: var(--popover) !important;
+  border: 1px solid var(--border) !important;
+  border-radius: 10px !important;
+  box-shadow: 
+    0 4px 12px -2px rgb(0 0 0 / 0.1),
+    0 2px 6px -1px rgb(0 0 0 / 0.05) !important;
+  padding: 8px 12px !important;
+  backdrop-filter: blur(8px);
 }
 
 /* 拼写检查 - 红色波浪线 */
@@ -829,6 +936,115 @@ a .text-foreground,
 .dark .milkdown-editor .cm-editor .ͼ1,
 .dark .milkdown-editor .cm-editor .ͼ2 {
   color: #d4d4d4 !important;
+}
+
+/* ==================== 暗色模式 Toolbar 和 Slash Menu 样式 ==================== */
+
+/* 暗色模式 Toolbar */
+.dark .milkdown .milkdown-toolbar {
+  background: var(--popover) !important;
+  border-color: var(--border) !important;
+  box-shadow: 
+    0 4px 12px -2px rgb(0 0 0 / 0.3),
+    0 2px 6px -1px rgb(0 0 0 / 0.2) !important;
+}
+
+.dark .milkdown .milkdown-toolbar .toolbar-item:hover {
+  background: var(--accent) !important;
+}
+
+.dark .milkdown .milkdown-toolbar .toolbar-item svg {
+  color: var(--muted-foreground) !important;
+  fill: var(--muted-foreground) !important;
+}
+
+.dark .milkdown .milkdown-toolbar .toolbar-item:hover svg {
+  color: var(--foreground) !important;
+  fill: var(--foreground) !important;
+}
+
+.dark .milkdown .milkdown-toolbar .toolbar-item.active svg {
+  color: oklch(0.7 0.15 250) !important;
+  fill: oklch(0.7 0.15 250) !important;
+}
+
+.dark .milkdown .milkdown-toolbar .divider {
+  background: var(--border) !important;
+}
+
+/* 暗色模式 Slash Menu */
+.dark .milkdown .milkdown-slash-menu {
+  background: var(--popover) !important;
+  border-color: var(--border) !important;
+  box-shadow: 
+    0 10px 38px -10px rgb(0 0 0 / 0.5),
+    0 10px 20px -15px rgb(0 0 0 / 0.3) !important;
+}
+
+.dark .milkdown .milkdown-slash-menu .menu-groups .menu-group h6 {
+  color: var(--muted-foreground) !important;
+}
+
+.dark .milkdown .milkdown-slash-menu .menu-groups .menu-group li:hover,
+.dark .milkdown .milkdown-slash-menu .menu-groups .menu-group li.hover {
+  background: var(--accent) !important;
+}
+
+.dark .milkdown .milkdown-slash-menu .menu-groups .menu-group li.active {
+  background: oklch(0.7 0.15 250 / 0.15) !important;
+}
+
+.dark .milkdown .milkdown-slash-menu .menu-groups .menu-group li svg {
+  color: var(--muted-foreground) !important;
+  fill: var(--muted-foreground) !important;
+}
+
+.dark .milkdown .milkdown-slash-menu .menu-groups .menu-group li:hover svg,
+.dark .milkdown .milkdown-slash-menu .menu-groups .menu-group li.hover svg {
+  color: var(--foreground) !important;
+  fill: var(--foreground) !important;
+}
+
+.dark .milkdown .milkdown-slash-menu .menu-groups .menu-group li > span {
+  color: var(--foreground) !important;
+}
+
+.dark .milkdown .milkdown-slash-menu .menu-groups .menu-group + .menu-group::before {
+  background: var(--border) !important;
+}
+
+/* 暗色模式 Block Handle */
+.dark .milkdown .milkdown-block-handle .operation-item svg {
+  color: var(--muted-foreground) !important;
+  fill: var(--muted-foreground) !important;
+}
+
+.dark .milkdown .milkdown-block-handle .operation-item:hover {
+  background: var(--accent) !important;
+}
+
+.dark .milkdown .milkdown-block-handle .operation-item:hover svg {
+  color: var(--foreground) !important;
+  fill: var(--foreground) !important;
+}
+
+.dark .milkdown .milkdown-block-handle .operation-item.active {
+  background: oklch(0.7 0.15 250 / 0.2) !important;
+}
+
+.dark .milkdown .milkdown-block-handle .operation-item.active svg {
+  color: oklch(0.7 0.15 250) !important;
+  fill: oklch(0.7 0.15 250) !important;
+}
+
+/* 暗色模式 Link Tooltip */
+.dark .milkdown .milkdown-link-preview,
+.dark .milkdown .milkdown-link-edit {
+  background: var(--popover) !important;
+  border-color: var(--border) !important;
+  box-shadow: 
+    0 4px 12px -2px rgb(0 0 0 / 0.4),
+    0 2px 6px -1px rgb(0 0 0 / 0.3) !important;
 }
 
 /* AI Chat 面板 Markdown 样式 */

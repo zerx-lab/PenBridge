@@ -330,6 +330,105 @@ createPromise = crepe.create().then(() => {
             console.warn("拼写检查插件加载失败:", err);
           }
         }
+
+        // 添加斜杠菜单位置自动调整
+        let lastAdjustedTop: number | null = null;
+        let lastAdjustedLeft: number | null = null;
+
+        const adjustSlashMenuPosition = () => {
+          const slashMenu = container.querySelector('.milkdown-slash-menu') as HTMLElement;
+          if (!slashMenu || slashMenu.dataset.show === 'false') return;
+
+          const rect = slashMenu.getBoundingClientRect();
+          const viewportHeight = window.innerHeight;
+          const viewportWidth = window.innerWidth;
+          const margin = 16; // 距离边缘的最小距离
+
+          let needsAdjustment = false;
+          let newTop = parseFloat(slashMenu.style.top) || 0;
+          let newLeft = parseFloat(slashMenu.style.left) || 0;
+
+          // 检查是否超出底部
+          if (rect.bottom > viewportHeight - margin) {
+            const overflowY = rect.bottom - viewportHeight + margin;
+            newTop = newTop - overflowY;
+            needsAdjustment = true;
+          }
+
+          // 检查是否超出顶部（如果向上调整后）
+          if (rect.top < margin) {
+            newTop = margin;
+            needsAdjustment = true;
+          }
+
+          // 检查是否超出右侧
+          if (rect.right > viewportWidth - margin) {
+            const overflowX = rect.right - viewportWidth + margin;
+            newLeft = newLeft - overflowX;
+            needsAdjustment = true;
+          }
+
+          // 检查是否超出左侧
+          if (rect.left < margin) {
+            newLeft = margin;
+            needsAdjustment = true;
+          }
+
+          // 只有在需要调整且位置确实变化时才更新
+          if (needsAdjustment && (newTop !== lastAdjustedTop || newLeft !== lastAdjustedLeft)) {
+            slashMenu.style.top = `${newTop}px`;
+            slashMenu.style.left = `${newLeft}px`;
+            lastAdjustedTop = newTop;
+            lastAdjustedLeft = newLeft;
+          }
+        };
+
+        // 重置调整记录
+        const resetAdjustment = () => {
+          lastAdjustedTop = null;
+          lastAdjustedLeft = null;
+        };
+
+        // 使用 MutationObserver 监控斜杠菜单的显示和位置变化
+        const observer = new MutationObserver((mutations) => {
+          for (const mutation of mutations) {
+            if (mutation.type === 'attributes') {
+              const target = mutation.target as HTMLElement;
+              
+              // 监控 data-show 属性变化
+              if (mutation.attributeName === 'data-show' && target.classList.contains('milkdown-slash-menu')) {
+                if (target.dataset.show === 'true') {
+                  resetAdjustment();
+                  // 使用多次 RAF 确保位置已经被 FloatingUI 计算完成
+                  requestAnimationFrame(() => {
+                    requestAnimationFrame(() => {
+                      adjustSlashMenuPosition();
+                    });
+                  });
+                } else {
+                  resetAdjustment();
+                }
+              }
+              
+              // 监控 style 属性变化（位置更新时）
+              if (mutation.attributeName === 'style' && target.classList.contains('milkdown-slash-menu') && target.dataset.show === 'true') {
+                requestAnimationFrame(() => {
+                  adjustSlashMenuPosition();
+                });
+              }
+            }
+          }
+        });
+
+        // 监控容器内的变化
+        observer.observe(container, {
+          subtree: true,
+          attributes: true,
+          attributeFilter: ['data-show', 'style'],
+        });
+
+        // 保存 observer 引用以便清理
+        (container as HTMLElement & { _slashMenuObserver?: MutationObserver })._slashMenuObserver = observer;
       }).catch(() => {
         // 静默忽略创建过程中的错误（通常是组件卸载导致的）
       });
@@ -343,6 +442,12 @@ createPromise = crepe.create().then(() => {
       isMountedRef.current = false;
       isCreatedRef.current = false;
       crepeRef.current = null;
+
+      // 断开斜杠菜单位置观察器
+      const slashMenuObserver = (container as HTMLElement & { _slashMenuObserver?: MutationObserver })._slashMenuObserver;
+      if (slashMenuObserver) {
+        slashMenuObserver.disconnect();
+      }
 
       // 如果编辑器已创建，等待创建完成后再销毁
       if (crepe) {

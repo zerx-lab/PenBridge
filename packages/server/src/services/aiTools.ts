@@ -8,6 +8,7 @@
 
 import { AppDataSource } from "../db";
 import { Article } from "../entities/Article";
+import { AIProvider, AIModel } from "../entities/AIProvider";
 
 /**
  * 工具定义接口
@@ -205,6 +206,28 @@ export const backendToolDefinitions: ToolDefinition[] = [
     },
     executionLocation: "backend",
   },
+  {
+    type: "function",
+    function: {
+      name: "view_image",
+      description: "查看并分析图片内容。支持通过 URL 或 Base64 编码的图片。可以描述图片内容、提取文字、分析图表等。",
+      parameters: {
+        type: "object",
+        properties: {
+          imageSource: {
+            type: "string",
+            description: "图片来源：URL 地址或 Base64 编码的图片数据（需要包含 data:image/xxx;base64, 前缀）",
+          },
+          question: {
+            type: "string",
+            description: "关于图片的问题或分析要求（可选，默认描述图片内容）",
+          },
+        },
+        required: ["imageSource"],
+      },
+    },
+    executionLocation: "backend",
+  },
   // 预留：Web 搜索工具（需要配置 API Key）
   // {
   //   type: "function",
@@ -315,6 +338,17 @@ export async function executeBackendTool(
         };
       }
       
+      case "view_image": {
+        const { imageSource, question } = args;
+        if (!imageSource) {
+          return { success: false, error: "缺少 imageSource 参数" };
+        }
+        
+        // 调用视觉模型分析图片
+        const result = await analyzeImage(imageSource, question);
+        return result;
+      }
+      
       // 预留：Web 搜索
       // case "web_search": {
       //   // 需要实现搜索 API 调用
@@ -354,4 +388,145 @@ export function formatToolsForAPI(): Array<{
       parameters: tool.function.parameters,
     },
   }));
+}
+
+/**
+ * 查找支持视觉能力的模型
+ */
+async function findVisionModel(): Promise<{
+  provider: AIProvider;
+  model: AIModel;
+} | null> {
+  const providerRepo = AppDataSource.getRepository(AIProvider);
+  const modelRepo = AppDataSource.getRepository(AIModel);
+  
+  // 查找所有启用的模型
+  const models = await modelRepo.find({
+    where: { userId: 1, enabled: true },
+  });
+  
+  // 查找支持视觉的模型
+  for (const model of models) {
+    const capabilities = model.capabilities as any;
+    if (capabilities?.vision?.supported) {
+      const provider = await providerRepo.findOne({
+        where: { id: model.providerId, userId: 1, enabled: true },
+      });
+      if (provider) {
+        return { provider, model };
+      }
+    }
+  }
+  
+  return null;
+}
+
+/**
+ * 分析图片内容
+ * 支持 URL 和 Base64 两种格式
+ */
+async function analyzeImage(
+  imageSource: string,
+  question?: string
+): Promise<{ success: boolean; result?: any; error?: string }> {
+  try {
+    // 查找支持视觉的模型
+    const visionConfig = await findVisionModel();
+    if (!visionConfig) {
+      return { 
+        success: false, 
+        error: "未配置支持视觉能力的模型。请在 AI 设置中添加一个支持视觉的模型（如 GLM-4V）并启用视觉能力。" 
+      };
+    }
+    
+    const { provider, model } = visionConfig;
+    
+    // 判断图片来源类型
+    let imageUrl: string;
+    if (imageSource.startsWith("data:image/")) {
+      // Base64 格式，直接使用
+      imageUrl = imageSource;
+    } else if (imageSource.startsWith("http://") || imageSource.startsWith("https://")) {
+      // URL 格式，直接使用
+      imageUrl = imageSource;
+    } else {
+      // 可能是相对路径，尝试转换为本地 base64
+      // 这里暂时只支持 URL 和 Base64
+      return { 
+        success: false, 
+        error: "不支持的图片格式。请提供图片 URL（http/https 开头）或 Base64 编码（data:image/ 开头）" 
+      };
+    }
+    
+    // 构建请求消息（OpenAI Vision API 格式，智谱 GLM-4V 完全兼容）
+    const messages = [
+      {
+        role: "user",
+        content: [
+          {
+            type: "text",
+            text: question || "请详细描述这张图片的内容，包括主要元素、文字、颜色、布局等信息。",
+          },
+          {
+            type: "image_url",
+            image_url: {
+              url: imageUrl,
+            },
+          },
+        ],
+      },
+    ];
+    
+    // 发送请求到视觉模型
+    const apiUrl = `${provider.baseUrl}/chat/completions`;
+    console.log(`[AI Tool] view_image 调用视觉模型: ${model.modelId} @ ${provider.name}`);
+    
+    const response = await fetch(apiUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${provider.apiKey}`,
+      },
+      body: JSON.stringify({
+        model: model.modelId,
+        messages,
+        max_tokens: 2048,
+        temperature: 0.3, // 使用较低温度以获得更准确的描述
+      }),
+    });
+    
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      const errorMessage = (errorData as any).error?.message || 
+                          `HTTP ${response.status}: ${response.statusText}`;
+      console.error(`[AI Tool] view_image 请求失败:`, errorMessage);
+      return { success: false, error: `视觉分析失败: ${errorMessage}` };
+    }
+    
+    const data = await response.json();
+    const content = data.choices?.[0]?.message?.content || "无法解析图片内容";
+    const usage = data.usage || {};
+    
+    console.log(`[AI Tool] view_image 分析完成, tokens: ${usage.total_tokens || 0}`);
+    
+    return {
+      success: true,
+      result: {
+        analysis: content,
+        model: model.modelId,
+        provider: provider.name,
+        usage: {
+          promptTokens: usage.prompt_tokens || 0,
+          completionTokens: usage.completion_tokens || 0,
+          totalTokens: usage.total_tokens || 0,
+        },
+      },
+    };
+  } catch (error) {
+    console.error(`[AI Tool] view_image 异常:`, error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "图片分析失败",
+    };
+  }
 }
