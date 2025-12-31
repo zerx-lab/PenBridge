@@ -87,6 +87,10 @@ export class AIModel {
   @Column({ default: 0 })
   order!: number;
 
+  // 上下文最大长度（tokens）- 用于展示使用进度
+  @Column({ type: "integer", nullable: true })
+  contextLength?: number;
+
   // 模型参数配置（JSON 格式，存储 temperature、max_tokens 等）
   @Column({ type: "simple-json", nullable: true })
   parameters?: {

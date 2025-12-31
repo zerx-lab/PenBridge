@@ -92,6 +92,7 @@ export function useAIChat(options: UseAIChatOptions): UseAIChatReturn {
           displayName: m.displayName,
           providerId: m.providerId,
           providerName: provider?.name || "未知供应商",
+          contextLength: m.contextLength,
           capabilities: m.capabilities,
         };
       });
@@ -313,6 +314,9 @@ export function useAIChat(options: UseAIChatOptions): UseAIChatReturn {
       let assistantContent = "";
       let assistantReasoning = "";
       let toolCalls: ToolCallRecord[] = [];
+      // 追踪消息的 usage 和 duration，用于保存到数据库
+      let messageUsage: { promptTokens: number; completionTokens: number; totalTokens: number } | undefined;
+      let messageDuration: number | undefined;
       
       // 创建临时消息 ID
       const tempMessageId = `temp_${Date.now()}_loop${loopCount}`;
@@ -485,7 +489,9 @@ export function useAIChat(options: UseAIChatOptions): UseAIChatReturn {
                 break;
                 
               case "done":
-                // 完成事件
+                // 完成事件 - 保存 usage 和 duration 供后续持久化
+                messageUsage = data.usage;
+                messageDuration = data.duration;
                 setMessages(prev => prev.map(m => 
                   m.id === tempMessageId 
                     ? { 
@@ -604,7 +610,7 @@ export function useAIChat(options: UseAIChatOptions): UseAIChatReturn {
             toolCalls: executedToolCalls,
           };
           
-          // 保存当前消息到数据库（包含工具调用信息）
+          // 保存当前消息到数据库（包含工具调用信息和 usage）
           if (session) {
             try {
               await addMessageMutation.mutateAsync({
@@ -613,6 +619,8 @@ export function useAIChat(options: UseAIChatOptions): UseAIChatReturn {
                 content: assistantContent,
                 reasoning: assistantReasoning || undefined,
                 status: "completed",
+                usage: messageUsage,
+                duration: messageDuration,
                 toolCalls: executedToolCalls.map(tc => ({
                   id: tc.id,
                   name: tc.name,
@@ -633,7 +641,7 @@ export function useAIChat(options: UseAIChatOptions): UseAIChatReturn {
           return;
         }
         
-        // 保存带工具调用的消息到数据库
+        // 保存带工具调用的消息到数据库（包含 usage）
         if (session) {
           try {
             await addMessageMutation.mutateAsync({
@@ -642,6 +650,8 @@ export function useAIChat(options: UseAIChatOptions): UseAIChatReturn {
               content: assistantContent,
               reasoning: assistantReasoning || undefined,
               status: "completed",
+              usage: messageUsage,
+              duration: messageDuration,
               toolCalls: executedToolCalls.map(tc => ({
                 id: tc.id,
                 name: tc.name,
@@ -686,7 +696,7 @@ export function useAIChat(options: UseAIChatOptions): UseAIChatReturn {
         await sendMessageToAPI(newHistory, loopCount + 1);
         console.log(`[AI Loop] 递归调用返回, loopCount=${loopCount}`);
       } else {
-        // 保存消息到数据库
+        // 保存消息到数据库（包含 usage 和 duration）
         if (session) {
           try {
             await addMessageMutation.mutateAsync({
@@ -695,6 +705,8 @@ export function useAIChat(options: UseAIChatOptions): UseAIChatReturn {
               content: assistantContent,
               reasoning: assistantReasoning || undefined,
               status: "completed",
+              usage: messageUsage,
+              duration: messageDuration,
             });
           } catch (err) {
             console.error("保存消息失败:", err);
@@ -784,6 +796,8 @@ export function useAIChat(options: UseAIChatOptions): UseAIChatReturn {
       try {
         await utils.client.aiChat.clearMessages.mutate({ sessionId: session.id });
         setMessages([]);
+        // 重置会话的 token 统计
+        setSession(prev => prev ? { ...prev, totalTokens: 0, messageCount: 0 } : null);
       } catch (err) {
         console.error("清空消息失败:", err);
       }

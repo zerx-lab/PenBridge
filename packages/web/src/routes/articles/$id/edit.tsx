@@ -78,6 +78,9 @@ function EditArticlePage() {
     onSuccess: () => {
       // 刷新文件树以更新标题
       trpcUtils.folder.tree.invalidate();
+      // 刷新文章缓存，确保切换文章后再切换回来时显示最新内容
+      trpcUtils.article.getMeta.invalidate({ id: Number(id) });
+      trpcUtils.article.getContent.invalidate({ id: Number(id) });
       // 更新保存状态为已保存
       setSaveStatus("saved");
       // 清除之前的定时器
@@ -276,15 +279,22 @@ function EditArticlePage() {
 
   // 处理 Word 导入
   const handleWordImport = useCallback(
-    (importedTitle: string, importedContent: string) => {
+    async (importedTitle: string, importedContent: string) => {
       setTitle(importedTitle);
       setContent(importedContent);
       // 强制重新渲染编辑器
       setEditorKey((prev) => prev + 1);
-      // 触发保存
-      debouncedSave(importedTitle, importedContent, summary);
+      
+      // 取消正在进行的防抖保存，避免与手动保存冲突
+      if (saveTimerRef.current) {
+        clearTimeout(saveTimerRef.current);
+        saveTimerRef.current = null;
+      }
+      
+      // 立即保存导入的内容（不使用防抖，确保内容持久化）
+      await doSave(importedTitle, importedContent, summaryRef.current);
     },
-    [summary, debouncedSave]
+    [doSave]
   );
 
   const onSave = async () => {

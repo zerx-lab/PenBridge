@@ -4,6 +4,7 @@ import {
   Column,
   CreateDateColumn,
   UpdateDateColumn,
+  Index,
 } from "typeorm";
 
 /**
@@ -36,14 +37,17 @@ export interface TokenUsage {
  * 存储用户与 AI 的对话会话
  */
 @Entity("ai_chat_sessions")
+@Index(["articleId", "userId"]) // 复合索引，优化按文章和用户查询会话
 export class AIChatSession {
   @PrimaryGeneratedColumn()
   id!: number;
 
+  @Index() // 单独索引，用于按用户查询
   @Column()
   userId!: number;
 
   // 关联的文章 ID（可选，用于文章辅助场景）
+  @Index() // 单独索引，用于按文章查询
   @Column({ nullable: true })
   articleId?: number;
 
@@ -84,6 +88,7 @@ export class AIChatMessage {
   id!: number;
 
   // 关联的会话 ID
+  @Index() // 索引，优化按会话查询消息
   @Column()
   sessionId!: number;
 

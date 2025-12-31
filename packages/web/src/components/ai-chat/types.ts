@@ -102,6 +102,8 @@ export interface AIModelInfo {
   displayName: string;
   providerId: number;
   providerName: string;
+  // 上下文最大长度（tokens）- 用于展示使用进度
+  contextLength?: number;
   capabilities?: {
     thinking?: { supported: boolean; enabled: boolean };
     streaming?: { supported: boolean; enabled: boolean };

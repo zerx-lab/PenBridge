@@ -21,6 +21,25 @@ if (!existsSync(dataDir)) {
   mkdirSync(dataDir, { recursive: true });
 }
 
+// 防抖保存：避免频繁写入磁盘
+let saveTimeout: ReturnType<typeof setTimeout> | null = null;
+let pendingData: Uint8Array | null = null;
+const SAVE_DEBOUNCE_MS = 100; // 100ms 防抖
+
+const debouncedSave = (data: Uint8Array) => {
+  pendingData = data;
+  if (saveTimeout) {
+    clearTimeout(saveTimeout);
+  }
+  saveTimeout = setTimeout(() => {
+    if (pendingData) {
+      writeFileSync(DB_PATH, Buffer.from(pendingData));
+      pendingData = null;
+    }
+    saveTimeout = null;
+  }, SAVE_DEBOUNCE_MS);
+};
+
 export const AppDataSource = new DataSource({
   type: "sqljs",
   database: existsSync(DB_PATH) ? readFileSync(DB_PATH) : undefined,
@@ -29,9 +48,7 @@ export const AppDataSource = new DataSource({
   entities: [User, Article, Folder, ScheduledTask, EmailConfig, AdminUser, AdminSession, AIProvider, AIModel, AIChatSession, AIChatMessage],
   driver: await initSqlJs(),
   autoSave: true,
-  autoSaveCallback: (data: Uint8Array) => {
-    writeFileSync(DB_PATH, Buffer.from(data));
-  },
+  autoSaveCallback: debouncedSave, // 使用防抖保存
 });
 
 export async function initDatabase() {

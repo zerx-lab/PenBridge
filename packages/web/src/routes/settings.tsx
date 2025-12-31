@@ -2166,6 +2166,8 @@ function AIConfigSettings() {
     modelId: "",
     displayName: "",
     isDefault: false,
+    // 上下文最大长度（tokens）
+    contextLength: undefined as number | undefined,
     parameters: {
       temperature: 0.7,
       maxTokens: 4096,
@@ -2332,6 +2334,7 @@ function AIConfigSettings() {
       modelId: "",
       displayName: "",
       isDefault: false,
+      contextLength: undefined,
       parameters: { temperature: 0.7, maxTokens: 4096 },
       capabilities: defaultCapabilities,
     });
@@ -2382,6 +2385,7 @@ function AIConfigSettings() {
       modelId: model.modelId,
       displayName: model.displayName,
       isDefault: model.isDefault,
+      contextLength: model.contextLength,
       parameters: model.parameters || { temperature: 0.7, maxTokens: 4096 },
       capabilities: mergedCapabilities,
     });
@@ -2923,6 +2927,23 @@ function AIConfigSettings() {
                       value={modelForm.displayName}
                       onChange={(e) => setModelForm({ ...modelForm, displayName: e.target.value })}
                     />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="model-contextLength">上下文最大长度 (Tokens)</Label>
+                    <Input
+                      id="model-contextLength"
+                      type="number"
+                      min="1"
+                      placeholder="如: 128000 (可选)"
+                      value={modelForm.contextLength || ""}
+                      onChange={(e) => setModelForm({ 
+                        ...modelForm, 
+                        contextLength: e.target.value ? parseInt(e.target.value) : undefined 
+                      })}
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      模型支持的最大上下文长度，用于在 AI 助手中展示 Token 使用进度
+                    </p>
                   </div>
                   <div className="flex items-center justify-between">
                     <Label htmlFor="model-isDefault" className="flex items-center gap-2">

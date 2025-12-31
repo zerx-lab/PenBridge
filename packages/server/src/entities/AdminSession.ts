@@ -5,6 +5,7 @@ import {
   CreateDateColumn,
   ManyToOne,
   JoinColumn,
+  Index,
 } from "typeorm";
 import { AdminUser, AdminRole } from "./AdminUser";
 
@@ -13,6 +14,7 @@ export class AdminSession {
   @PrimaryGeneratedColumn()
   id!: number;
 
+  @Index() // 显式索引，优化 token 查询验证
   @Column({ unique: true })
   token!: string;
 

@@ -1816,6 +1816,8 @@ export const appRouter = t.router({
           modelId: z.string().min(1, "请输入模型标识"),
           displayName: z.string().min(1, "请输入显示名称"),
           isDefault: z.boolean().optional(),
+          // 上下文最大长度（tokens）
+          contextLength: z.number().min(1).optional(),
           parameters: z.object({
             temperature: z.number().min(0).max(2).optional(),
             maxTokens: z.number().min(1).optional(),
@@ -1893,6 +1895,8 @@ export const appRouter = t.router({
           displayName: z.string().min(1).optional(),
           isDefault: z.boolean().optional(),
           enabled: z.boolean().optional(),
+          // 上下文最大长度（tokens）
+          contextLength: z.number().min(1).optional(),
           parameters: z.object({
             temperature: z.number().min(0).max(2).optional(),
             maxTokens: z.number().min(1).optional(),

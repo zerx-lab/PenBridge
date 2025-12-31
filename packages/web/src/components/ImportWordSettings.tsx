@@ -4,7 +4,7 @@ import { Upload, Loader2 } from "lucide-react";
 import { convertWordToMarkdown } from "@/utils/wordToMarkdown";
 
 interface ImportWordSettingsProps {
-  onImport: (title: string, content: string) => void;
+  onImport: (title: string, content: string) => void | Promise<void>;
 }
 
 /**
@@ -25,8 +25,9 @@ export function ImportWordSettings({ onImport }: ImportWordSettingsProps) {
     setIsImporting(true);
     try {
       const result = await convertWordToMarkdown(file);
-      onImport(result.title, result.markdown);
-      message.success(`已导入: ${result.fileName}`);
+      // 等待 onImport 完成（支持异步保存）
+      await onImport(result.title, result.markdown);
+      message.success(`已导入并保存: ${result.fileName}`);
     } catch (error) {
       console.error("导入 Word 失败:", error);
       message.error(

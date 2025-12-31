@@ -3,7 +3,7 @@
  * 作为侧边栏展开，类似目录树
  */
 
-import { useState, useRef, useCallback, useEffect } from "react";
+import { useState, useRef, useCallback, useEffect, useMemo } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { 
@@ -263,6 +263,7 @@ export function AIChatPanel({
   
   // AI 聊天 Hook
   const {
+    session,
     messages,
     isLoading,
     isStreaming,
@@ -283,6 +284,14 @@ export function AIChatPanel({
     articleId: articleContext?.articleId,
     toolContext,
   });
+  
+  // 计算当前会话的 token 总使用量
+  // 优先从 messages 中累计（实时），如果为 0 则使用 session.totalTokens（历史数据）
+  const sessionTokens = useMemo(() => {
+    const fromMessages = messages.reduce((sum, m) => sum + (m.usage?.totalTokens || 0), 0);
+    // 如果从消息中计算的值为 0，使用会话中存储的历史值
+    return fromMessages > 0 ? fromMessages : (session?.totalTokens || 0);
+  }, [messages, session?.totalTokens]);
   
   // 判断用户是否在底部（允许 50px 的误差）
   const isNearBottom = useCallback(() => {
@@ -473,6 +482,41 @@ export function AIChatPanel({
           availableModels={availableModels}
           onModelChange={handleModelChange}
         />
+        
+        {/* Token 使用量展示 - 仅在有实际使用量时显示 */}
+        {sessionTokens > 0 && (
+          <div className="px-4 py-2 border-b shrink-0 space-y-1">
+            <div className="flex items-center justify-between text-xs text-muted-foreground">
+              <span>会话 Tokens</span>
+              <span>
+                {sessionTokens.toLocaleString()}
+                {selectedModel?.contextLength && (
+                  <span className="text-muted-foreground/70">
+                    {" / "}{selectedModel.contextLength.toLocaleString()}
+                  </span>
+                )}
+              </span>
+            </div>
+            {/* 进度条 - 仅在配置了上下文长度时显示 */}
+            {selectedModel?.contextLength && (
+              <div className="h-1.5 bg-muted rounded-full overflow-hidden">
+                <div 
+                  className={cn(
+                    "h-full rounded-full transition-all duration-300",
+                    sessionTokens / selectedModel.contextLength > 0.9 
+                      ? "bg-red-500" 
+                      : sessionTokens / selectedModel.contextLength > 0.7 
+                        ? "bg-yellow-500" 
+                        : "bg-purple-500"
+                  )}
+                  style={{ 
+                    width: `${Math.min(100, (sessionTokens / selectedModel.contextLength) * 100)}%` 
+                  }}
+                />
+              </div>
+            )}
+          </div>
+        )}
         
         {/* 消息列表 */}
         <div className="flex-1 min-h-0 relative">

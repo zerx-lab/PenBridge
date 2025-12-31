@@ -632,19 +632,29 @@ app.post("/api/ai/chat/stream", async (c) => {
       return msg;
     };
     
+    // 预先计算工具是否启用（用于系统提示词构建）
+    const functionCallingEnabled = capabilities?.functionCalling?.supported !== false;
+    const shouldEnableTools = enableTools !== false && functionCallingEnabled;
+    
     // 构建系统提示
     let systemMessage = messages.find((m: any) => m.role === "system");
     const userMessages = messages.filter((m: any) => m.role !== "system");
     
     // 如果有文章上下文，添加到系统提示中
     if (articleContext) {
-      const contextInfo = `\n\n当前用户正在编辑一篇文章：
+      // 基础文章信息
+      let contextInfo = `\n\n当前用户正在编辑一篇文章：
 - 文章标题: ${articleContext.title || "无标题"}
 - 文章字数: ${articleContext.contentLength || 0} 字
-- 文章ID: ${articleContext.articleId}
+- 文章ID: ${articleContext.articleId}`;
+
+      // 只有在工具调用启用时才提及工具
+      if (shouldEnableTools) {
+        contextInfo += `
 
 你可以使用 read_article 或 read_article_chunk 工具来读取文章内容。
 如果用户要求修改文章，请使用相应的工具（如 update_title, insert_content, replace_content 等）。`;
+      }
       
       if (systemMessage) {
         systemMessage = {
@@ -687,8 +697,7 @@ app.post("/api/ai/chat/stream", async (c) => {
     // 1. 请求中 enableTools !== false（默认启用）
     // 2. 模型配置中 functionCalling.supported !== false（默认支持）
     // 注：某些视觉模型（如 glm-4.6v-flash）不支持工具调用，需要在模型配置中设置 functionCalling.supported = false
-    const functionCallingEnabled = capabilities?.functionCalling?.supported !== false;
-    const shouldEnableTools = enableTools !== false && functionCallingEnabled;
+    // （functionCallingEnabled 和 shouldEnableTools 已在前面计算）
     logStep(`工具配置: enableTools=${enableTools}, functionCallingSupported=${functionCallingEnabled}, 最终=${shouldEnableTools}`);
     
     if (shouldEnableTools) {
