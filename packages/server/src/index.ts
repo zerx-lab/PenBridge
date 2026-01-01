@@ -727,20 +727,39 @@ app.post("/api/ai/chat/stream", async (c) => {
     // 添加深度思考配置
     // 深度思考是否启用现在由请求参数 thinkingEnabled 控制（从 AI Chat 面板动态传递）
     // 而不再从模型配置中读取 thinking.enabled
-    if (thinkingConfig?.supported && thinkingEnabled) {
+    // 
+    // 重要：当模型支持深度思考时，无论用户是否启用，都需要显式设置配置
+    // 因为某些模型可能默认开启深度思考，需要显式禁用
+    if (thinkingConfig?.supported) {
       const apiFormat = thinkingConfig.apiFormat || "standard";
       
-      if (apiFormat === "openai") {
-        // OpenAI 格式：使用请求中传递的 reasoningEffort，默认为 medium
-        requestBody.reasoning = {
-          effort: reasoningEffort || "medium",
-        };
-        if (thinkingConfig.reasoningSummary && thinkingConfig.reasoningSummary !== "disabled") {
-          requestBody.reasoning.summary = thinkingConfig.reasoningSummary;
+      if (thinkingEnabled) {
+        // 用户启用了深度思考
+        if (apiFormat === "openai") {
+          // OpenAI 格式：使用请求中传递的 reasoningEffort，默认为 medium
+          requestBody.reasoning = {
+            effort: reasoningEffort || "medium",
+          };
+          if (thinkingConfig.reasoningSummary && thinkingConfig.reasoningSummary !== "disabled") {
+            requestBody.reasoning.summary = thinkingConfig.reasoningSummary;
+          }
+        } else {
+          // 标准格式（智谱/DeepSeek）
+          requestBody.thinking = { type: "enabled" };
         }
       } else {
-        // 标准格式（智谱/DeepSeek）
-        requestBody.thinking = { type: "enabled" };
+        // 用户未启用深度思考，显式禁用（防止模型默认开启）
+        if (apiFormat === "openai") {
+          // OpenAI 格式：不发送 reasoning 参数即可禁用，
+          // 但为了明确性，可以设置 reasoning 为 undefined 或不设置
+          // OpenAI 推理模型在不传递 reasoning 参数时应该使用默认行为
+          // 目前 OpenAI 没有明确的禁用参数，不传递 reasoning 即可
+          logStep("深度思考未启用（OpenAI 格式）: 不发送 reasoning 参数");
+        } else {
+          // 标准格式（智谱/DeepSeek）：显式设置 disabled
+          requestBody.thinking = { type: "disabled" };
+          logStep("深度思考未启用（标准格式）: 已设置 thinking.type = disabled");
+        }
       }
     }
     

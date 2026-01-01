@@ -14,6 +14,7 @@
     "@hono/trpc-server": "^0.4.1",
     "@trpc/server": "10.45.0",
     "hono": "^4.11.3",
+    "jszip": "^3.10.1",
     "nodemailer": "^7.0.12",
     "sql.js": "^1.13.0",
     "typeorm": "^0.3.28",
