@@ -33,8 +33,9 @@ win:
   target:
     - target: nsis
       arch:
+        # 注意: Bun 目前不支持 Windows ARM64 交叉编译，因此只构建 x64 版本
+        # Windows ARM64 用户可以通过 Windows 兼容层运行 x64 版本
         - x64
-        - arm64
 
 # NSIS 安装程序配置 - 交互式安装
 nsis:

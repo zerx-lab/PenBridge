@@ -307,8 +307,8 @@ jobs:
           New-Item -ItemType Directory -Force -Path "../electron/server/prompts"
           # 构建 x64 版本
           bun build src/index.ts --compile --outfile ../electron/server/pen-bridge-server-x64.exe --target bun-windows-x64
-          # 构建 ARM64 版本
-          bun build src/index.ts --compile --outfile ../electron/server/pen-bridge-server-arm64.exe --target bun-windows-arm64
+          # 注意: Bun 目前不支持 Windows ARM64 交叉编译，暂时跳过
+          # ARM64 版本将使用 x64 通过 Windows 兼容层运行
           # 复制 prompts 目录
           Copy-Item -Path "src/prompts/*" -Destination "../electron/server/prompts" -Recurse
         working-directory: packages/server
@@ -330,7 +330,7 @@ jobs:
         run: npm run build
         working-directory: electron
 
-      - name: Package for Windows (NSIS installer x64 + arm64)
+      - name: Package for Windows (NSIS installer x64)
         # 使用 --publish never 阻止 electron-builder 自动发布
         # 发布由最后的 release job 统一处理
         run: npx electron-builder --win --publish never
@@ -616,11 +616,11 @@ jobs:
             notes += `| Platform | Architecture | File |\n`;
             notes += `|----------|--------------|------|\n`;
             notes += `| Windows | x64 | \`PenBridge-Setup-${{ needs.prepare.outputs.version }}-x64.exe\` |\n`;
-            notes += `| Windows | ARM64 | \`PenBridge-Setup-${{ needs.prepare.outputs.version }}-arm64.exe\` |\n`;
             notes += `| macOS | Intel (x64) | \`PenBridge-darwin-x64-${{ needs.prepare.outputs.version }}.zip\` |\n`;
             notes += `| macOS | Apple Silicon (ARM64) | \`PenBridge-darwin-arm64-${{ needs.prepare.outputs.version }}.zip\` |\n`;
             notes += `| Linux | x64 | \`PenBridge-${{ needs.prepare.outputs.version }}-x64.AppImage\` / \`.deb\` |\n`;
             notes += `| Linux | ARM64 | \`PenBridge-${{ needs.prepare.outputs.version }}-arm64.AppImage\` / \`.deb\` |\n`;
+            notes += `\n> **Note:** Windows ARM64 用户可以通过 Windows 兼容层运行 x64 版本。\n`;
 
             core.setOutput('notes', notes);
             return notes;
