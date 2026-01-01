@@ -206,13 +206,13 @@ jobs:
 
       - name: Build server for macOS (x64)
         run: |
-          mkdir -p electron/server/prompts
+          mkdir -p ../../electron/server/prompts
           # 构建 x64 版本
-          bun build src/index.ts --compile --outfile ../electron/server/pen-bridge-server-x64 --target bun-darwin-x64
+          bun build src/index.ts --compile --outfile ../../electron/server/pen-bridge-server-x64 --target bun-darwin-x64
           # 构建 ARM64 版本
-          bun build src/index.ts --compile --outfile ../electron/server/pen-bridge-server-arm64 --target bun-darwin-arm64
+          bun build src/index.ts --compile --outfile ../../electron/server/pen-bridge-server-arm64 --target bun-darwin-arm64
           # 复制 prompts 目录
-          cp -r src/prompts ../electron/server/prompts
+          cp -r src/prompts/* ../../electron/server/prompts/
         working-directory: packages/server
 
       - name: Update Electron package version
@@ -326,13 +326,13 @@ jobs:
       - name: Build server for Windows
         shell: pwsh
         run: |
-          New-Item -ItemType Directory -Force -Path "../electron/server/prompts"
+          New-Item -ItemType Directory -Force -Path "../../electron/server/prompts"
           # 构建 x64 版本
-          bun build src/index.ts --compile --outfile ../electron/server/pen-bridge-server-x64.exe --target bun-windows-x64
+          bun build src/index.ts --compile --outfile ../../electron/server/pen-bridge-server-x64.exe --target bun-windows-x64
           # 注意: Bun 目前不支持 Windows ARM64 交叉编译，暂时跳过
           # ARM64 版本将使用 x64 通过 Windows 兼容层运行
           # 复制 prompts 目录
-          Copy-Item -Path "src/prompts/*" -Destination "../electron/server/prompts" -Recurse
+          Copy-Item -Path "src/prompts/*" -Destination "../../electron/server/prompts" -Recurse
         working-directory: packages/server
 
       - name: Update Electron package version
@@ -447,13 +447,13 @@ jobs:
 
       - name: Build server for Linux
         run: |
-          mkdir -p ../electron/server/prompts
+          mkdir -p ../../electron/server/prompts
           # 构建 x64 版本
-          bun build src/index.ts --compile --outfile ../electron/server/pen-bridge-server-x64 --target bun-linux-x64
+          bun build src/index.ts --compile --outfile ../../electron/server/pen-bridge-server-x64 --target bun-linux-x64
           # 构建 ARM64 版本
-          bun build src/index.ts --compile --outfile ../electron/server/pen-bridge-server-arm64 --target bun-linux-arm64
+          bun build src/index.ts --compile --outfile ../../electron/server/pen-bridge-server-arm64 --target bun-linux-arm64
           # 复制 prompts 目录
-          cp -r src/prompts ../electron/server/prompts
+          cp -r src/prompts/* ../../electron/server/prompts/
         working-directory: packages/server
 
       - name: Update Electron package version
