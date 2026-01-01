@@ -184,6 +184,7 @@ const mutation = trpc.xxx.useMutation({
 ## 重要注意事项
 
 - 专注于当前任务,不修改无关代码
+- 严禁直接修改package,需要使用包管理工具管理依赖
 
 ### 版本兼容性
 - **React Query**: 使用 v4.x（`isLoading` 而非 `isPending`）

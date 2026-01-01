@@ -12,7 +12,10 @@ import {
   ArrowRight,
   Check,
   MonitorDown,
+  Loader2,
+  ThumbsUp,
 } from "lucide-react";
+import { useState, useEffect } from "react";
 
 // 动画变体
 const fadeInUp = {
@@ -218,15 +221,111 @@ function FeaturesSection() {
   );
 }
 
-function PlatformsSection() {
-  const platforms = [
-    { name: "腾讯云开发者社区", status: "已支持", color: "text-green-500" },
-    { name: "掘金", status: "已支持", color: "text-green-500" },
-    { name: "CSDN", status: "规划中", color: "text-amber-500" },
-    { name: "思否", status: "规划中", color: "text-amber-500" },
-    { name: "知乎", status: "规划中", color: "text-amber-500" },
-    { name: "博客园", status: "规划中", color: "text-amber-500" },
+// 平台类型
+interface Platform {
+  id: string;
+  name: string;
+  status: "completed" | "planned" | "voting";
+  votes: number;
+  discussionNumber?: number;
+}
+
+// 从 API 获取的功能类型
+interface Feature {
+  id: string;
+  title: string;
+  description: string;
+  votes: number;
+  status: "voting" | "planned" | "completed";
+  category: string;
+  discussionId: string;
+  discussionNumber: number;
+  createdAt: string;
+}
+
+interface FeaturesResponse {
+  features: Feature[];
+  totalVotes: number;
+  totalParticipants: number;
+  source: "static" | "github";
+}
+
+// 静态平台数据（备用）
+function getStaticPlatforms(): Platform[] {
+  return [
+    { id: "tencent", name: "腾讯云开发者社区", status: "completed", votes: 0 },
+    { id: "juejin", name: "掘金", status: "completed", votes: 0 },
+    { id: "csdn", name: "CSDN", status: "voting", votes: 0 },
+    { id: "segmentfault", name: "思否", status: "voting", votes: 0 },
+    { id: "zhihu", name: "知乎", status: "voting", votes: 0 },
+    { id: "cnblogs", name: "博客园", status: "voting", votes: 0 },
   ];
+}
+
+function PlatformsSection() {
+  const [platforms, setPlatforms] = useState<Platform[]>(getStaticPlatforms());
+  const [isLoading, setIsLoading] = useState(true);
+  const [dataSource, setDataSource] = useState<"static" | "github">("static");
+
+  useEffect(() => {
+    const fetchPlatforms = async () => {
+      try {
+        const response = await fetch("/api/features");
+        if (!response.ok) throw new Error("Failed to fetch");
+        
+        const data: FeaturesResponse = await response.json();
+        
+        // 筛选 "平台支持" 分类的功能
+        const platformFeatures = data.features.filter(f => f.category === "平台支持");
+        
+        // 转换为平台数据
+        const dynamicPlatforms: Platform[] = platformFeatures.map(f => ({
+          id: f.id,
+          name: f.title,
+          status: f.status,
+          votes: f.votes,
+          discussionNumber: f.discussionNumber,
+        }));
+
+        // 按状态和投票数排序：已完成的在前，然后按投票数降序
+        dynamicPlatforms.sort((a, b) => {
+          // 已完成的优先
+          if (a.status === "completed" && b.status !== "completed") return -1;
+          if (a.status !== "completed" && b.status === "completed") return 1;
+          // 同状态按投票数降序
+          return b.votes - a.votes;
+        });
+
+        // 只取前 6 个
+        setPlatforms(dynamicPlatforms.slice(0, 6));
+        setDataSource(data.source);
+      } catch {
+        // 使用静态数据
+        setPlatforms(getStaticPlatforms());
+        setDataSource("static");
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchPlatforms();
+  }, []);
+
+  const getStatusText = (status: Platform["status"]) => {
+    switch (status) {
+      case "completed": return "已支持";
+      case "planned": return "已规划";
+      case "voting": return "投票中";
+    }
+  };
+
+  const getStatusColor = (status: Platform["status"]) => {
+    switch (status) {
+      case "completed": return "text-green-500";
+      case "planned": return "text-amber-500";
+      case "voting": return "text-blue-500";
+    }
+  };
 
   return (
     <section className="py-24">
@@ -246,21 +345,35 @@ function PlatformsSection() {
           </p>
         </motion.div>
 
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-          {platforms.map((platform, index) => (
-            <motion.div
-              key={platform.name}
-              initial={{ opacity: 0, scale: 0.9 }}
-              whileInView={{ opacity: 1, scale: 1 }}
-              viewport={{ once: true }}
-              transition={{ delay: index * 0.05, duration: 0.3 }}
-              className="p-4 rounded-xl bg-card border border-border text-center hover:border-primary/50 transition-colors"
-            >
-              <p className="font-medium mb-1">{platform.name}</p>
-              <p className={`text-sm ${platform.color}`}>{platform.status}</p>
-            </motion.div>
-          ))}
-        </div>
+        {isLoading ? (
+          <div className="flex items-center justify-center py-12">
+            <Loader2 className="w-8 h-8 animate-spin text-primary" />
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+            {platforms.map((platform, index) => (
+              <motion.div
+                key={platform.id}
+                initial={{ opacity: 0, scale: 0.9 }}
+                whileInView={{ opacity: 1, scale: 1 }}
+                viewport={{ once: true }}
+                transition={{ delay: index * 0.05, duration: 0.3 }}
+                className="p-4 rounded-xl bg-card border border-border text-center hover:border-primary/50 transition-colors"
+              >
+                <p className="font-medium mb-1">{platform.name}</p>
+                <p className={`text-sm ${getStatusColor(platform.status)}`}>
+                  {getStatusText(platform.status)}
+                </p>
+                {platform.status !== "completed" && platform.votes > 0 && dataSource === "github" && (
+                  <p className="text-xs text-muted-foreground mt-1 flex items-center justify-center gap-1">
+                    <ThumbsUp className="w-3 h-3" />
+                    {platform.votes}
+                  </p>
+                )}
+              </motion.div>
+            ))}
+          </div>
+        )}
 
         <motion.div
           initial={{ opacity: 0 }}

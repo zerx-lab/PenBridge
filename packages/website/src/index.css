@@ -149,6 +149,8 @@
 
 html {
   scroll-behavior: smooth;
+  /* 保持滚动条占位，防止模态框打开时页面抖动 */
+  scrollbar-gutter: stable;
 }
 
 /* 全局滚动条样式 */

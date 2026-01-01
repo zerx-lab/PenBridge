@@ -21,6 +21,13 @@ import {
 } from "lucide-react";
 import { useState, useEffect, useCallback } from "react";
 import { cn } from "@/lib/utils";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 // 用户信息类型
 interface GitHubUser {
@@ -99,6 +106,7 @@ function SurveyPage() {
   const [showSuggestModal, setShowSuggestModal] = useState(false);
   const [suggestTitle, setSuggestTitle] = useState("");
   const [suggestDescription, setSuggestDescription] = useState("");
+  const [suggestCategory, setSuggestCategory] = useState<"功能增强" | "用户建议">("功能增强");
   const [isSubmitting, setIsSubmitting] = useState(false);
   
   const [filter, setFilter] = useState<"all" | "voting" | "planned" | "completed">("all");
@@ -293,6 +301,7 @@ function SurveyPage() {
           action: "suggest",
           title: suggestTitle.trim(),
           description: suggestDescription.trim(),
+          category: suggestCategory,
         }),
       });
 
@@ -306,6 +315,7 @@ function SurveyPage() {
       setShowSuggestModal(false);
       setSuggestTitle("");
       setSuggestDescription("");
+      setSuggestCategory("功能增强");
       await fetchFeatures();
     } catch (err) {
       setError(err instanceof Error ? err.message : "提交失败");
@@ -736,6 +746,26 @@ function SurveyPage() {
                       className="w-full px-4 py-3 rounded-lg border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary/50"
                       maxLength={100}
                     />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium mb-2">
+                      分类
+                    </label>
+                    <Select
+                      value={suggestCategory}
+                      onValueChange={(value) => setSuggestCategory(value as "功能增强" | "用户建议")}
+                    >
+                      <SelectTrigger className="w-full">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent
+                        onCloseAutoFocus={(e) => e.preventDefault()}
+                      >
+                        <SelectItem value="功能增强">功能增强</SelectItem>
+                        <SelectItem value="用户建议">用户建议</SelectItem>
+                      </SelectContent>
+                    </Select>
                   </div>
 
                   <div>

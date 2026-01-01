@@ -27,6 +27,11 @@
   "devDependencies": {
     "concurrently": "^9.2.1",
     "cross-env": "^7.0.3",
+    "icns-lib": "^1.0.1",
+    "png-to-icns": "^1.0.0",
+    "png-to-ico": "^3.0.1",
+    "png2icns": "^0.0.1",
+    "sharp": "^0.34.5",
     "shx": "^0.4.0",
     "typescript": "^5.9.3"
   }

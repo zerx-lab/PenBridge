@@ -170,6 +170,8 @@ function DocsPage() {
       const hash = window.location.hash.slice(1);
       if (hash && hash in docComponents) {
         setActiveSection(hash as DocId);
+        // hash 变化时滚动到顶部
+        window.scrollTo({ top: 0, behavior: "instant" });
       }
     };
     
@@ -204,6 +206,8 @@ function DocsPage() {
                     onClick={() => {
                       setActiveSection(doc.id as DocId);
                       window.location.hash = doc.id;
+                      // 切换文档时滚动到顶部
+                      window.scrollTo({ top: 0, behavior: "instant" });
                     }}
                     className={cn(
                       "w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-left transition-colors",

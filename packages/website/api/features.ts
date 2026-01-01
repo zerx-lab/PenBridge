@@ -369,7 +369,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     // POST - 投票或提交建议
     if (req.method === "POST") {
-      const { action, featureId, userToken, title, description } = req.body;
+      const { action, featureId, userToken, title, description, category } = req.body;
 
       if (!serverToken) {
         return res.status(501).json({ 
@@ -383,6 +383,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         if (!title || !description) {
           return res.status(400).json({ error: "缺少标题或描述" });
         }
+
+        // 用户选择的分类，默认为 "功能增强"
+        const userCategory = category || "功能增强";
 
         // 获取仓库 ID 和分类 ID
         const repoData = await graphqlRequest(GET_DISCUSSIONS_QUERY, {
@@ -415,8 +418,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         const createResult = await graphqlRequest(CREATE_DISCUSSION_MUTATION, {
           repositoryId,
           categoryId,
-          title: `[功能建议] ${title}`,
-          body: `## 功能描述\n\n${description}\n\n---\n*此建议通过 PenBridge 网站提交*\n\n> 管理员可以通过添加标签来设置状态和分类：\n> - \`status:voting\` / \`status:planned\` / \`status:completed\`\n> - \`category:平台支持\` / \`category:功能增强\` / \`category:用户建议\``,
+          title: `[${userCategory}] ${title}`,
+          body: `## 功能描述\n\n${description}\n\n---\n\n**建议分类**: ${userCategory}\n\n*此建议通过 PenBridge 网站提交*\n\n> 管理员请添加以下标签：\n> - \`status:voting\`（开始投票）\n> - \`category:${userCategory}\``,
         });
 
         const newDiscussion = createResult.data?.createDiscussion?.discussion;
