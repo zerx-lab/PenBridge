@@ -29,8 +29,6 @@ const REPO_NAME = "PenBridge";
 const DEFAULT_STATUS = "voting";
 const DEFAULT_CATEGORY = "用户建议";
 
-// 状态标签前缀
-const STATUS_LABEL_PREFIX = "status:";
 // 分类标签前缀
 const CATEGORY_LABEL_PREFIX = "category:";
 
