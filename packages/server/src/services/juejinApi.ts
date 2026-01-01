@@ -998,21 +998,25 @@ export class JuejinApiClient {
     secretAccessKey: string,
     sessionToken: string,
     date: Date
-  ): string {
+  ): { authorization: string; amzDate: string } {
     const region = "cn-north-1";
     const service = "imagex";
     const algorithm = "AWS4-HMAC-SHA256";
 
-    // 格式化日期
-    const amzDate = date.toISOString().replace(/[:-]|\.\d{3}/g, "").slice(0, 15) + "Z";
+    // 格式化日期 - ISO8601 格式无分隔符
+    const amzDate = date.toISOString().replace(/[:-]|\.\d{3}/g, "");
     const dateStamp = amzDate.slice(0, 8);
 
     // 解析 URL
     const urlObj = new URL(url);
-    const canonicalUri = urlObj.pathname;
-    const canonicalQuerystring = urlObj.search.slice(1);
+    const canonicalUri = urlObj.pathname || "/";
+    
+    // 规范化查询字符串（按字母顺序排序）
+    const queryParams = new URLSearchParams(urlObj.search);
+    const sortedParams = Array.from(queryParams.entries()).sort((a, b) => a[0].localeCompare(b[0]));
+    const canonicalQuerystring = sortedParams.map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`).join("&");
 
-    // 规范请求头
+    // 规范请求头 - 按照掘金文档，不包含 host
     const signedHeaders = "x-amz-date;x-amz-security-token";
     const canonicalHeaders = `x-amz-date:${amzDate}\nx-amz-security-token:${sessionToken}\n`;
 
@@ -1028,6 +1032,14 @@ export class JuejinApiClient {
       signedHeaders,
       payloadHash,
     ].join("\n");
+
+    log("AWS4 规范请求:", {
+      method,
+      canonicalUri,
+      querystring: canonicalQuerystring.substring(0, 100),
+      signedHeaders,
+      amzDate,
+    });
 
     // 创建待签名字符串
     const credentialScope = `${dateStamp}/${region}/${service}/aws4_request`;
@@ -1048,7 +1060,11 @@ export class JuejinApiClient {
     const signature = crypto.createHmac("sha256", kSigning).update(stringToSign).digest("hex");
 
     // 构建 Authorization 头
-    return `${algorithm} Credential=${accessKeyId}/${credentialScope}, SignedHeaders=${signedHeaders}, Signature=${signature}`;
+    const authorization = `${algorithm} Credential=${accessKeyId}/${credentialScope}, SignedHeaders=${signedHeaders}, Signature=${signature}`;
+    
+    log("AWS4 签名结果:", authorization.substring(0, 80) + "...");
+    
+    return { authorization, amzDate };
   }
 
   /**
@@ -1068,7 +1084,7 @@ export class JuejinApiClient {
     const url = `https://imagex.bytedanceapi.com/?Action=ApplyImageUpload&Version=2018-08-01&ServiceId=${serviceId}`;
     const date = new Date();
 
-    const authorization = this.signAws4(
+    const { authorization, amzDate } = this.signAws4(
       "GET",
       url,
       token.accessKeyId,
@@ -1076,8 +1092,6 @@ export class JuejinApiClient {
       token.sessionToken,
       date
     );
-
-    const amzDate = date.toISOString().replace(/[:-]|\.\d{3}/g, "").slice(0, 15) + "Z";
 
     const response = await fetch(url, {
       method: "GET",
@@ -1091,9 +1105,13 @@ export class JuejinApiClient {
       },
     });
 
-    const result = await response.json() as {
-      ResponseMetadata: { RequestId: string };
-      Result: {
+    const text = await response.text();
+    log("ApplyImageUpload 响应状态:", response.status);
+    log("ApplyImageUpload 响应:", text.substring(0, 800));
+    
+    let result: {
+      ResponseMetadata: { RequestId: string; Error?: { Code: string; Message: string } };
+      Result?: {
         UploadAddress: {
           StoreInfos: Array<{ StoreUri: string; Auth: string }>;
           UploadHosts: string[];
@@ -1101,9 +1119,20 @@ export class JuejinApiClient {
         };
       };
     };
+    
+    try {
+      result = JSON.parse(text);
+    } catch {
+      throw new Error(`申请上传地址失败: 响应解析错误 - ${text.substring(0, 200)}`);
+    }
+
+    // 检查错误响应
+    if (result.ResponseMetadata?.Error) {
+      throw new Error(`申请上传地址失败: ${result.ResponseMetadata.Error.Code} - ${result.ResponseMetadata.Error.Message}`);
+    }
 
     if (!result.Result?.UploadAddress?.StoreInfos?.[0]) {
-      throw new Error("申请上传地址失败");
+      throw new Error(`申请上传地址失败: 响应结构异常 - ${JSON.stringify(result).substring(0, 300)}`);
     }
 
     const storeInfo = result.Result.UploadAddress.StoreInfos[0];
@@ -1197,7 +1226,7 @@ export class JuejinApiClient {
     const url = `https://imagex.bytedanceapi.com/?Action=CommitImageUpload&Version=2018-08-01&SessionKey=${encodeURIComponent(sessionKey)}&ServiceId=${serviceId}`;
     const date = new Date();
 
-    const authorization = this.signAws4(
+    const { authorization, amzDate } = this.signAws4(
       "POST",
       url,
       token.accessKeyId,
@@ -1205,8 +1234,6 @@ export class JuejinApiClient {
       token.sessionToken,
       date
     );
-
-    const amzDate = date.toISOString().replace(/[:-]|\.\d{3}/g, "").slice(0, 15) + "Z";
 
     const response = await fetch(url, {
       method: "POST",
@@ -1268,7 +1295,15 @@ export class JuejinApiClient {
   }
 
   /**
+   * 延时函数
+   */
+  private delay(ms: number): Promise<void> {
+    return new Promise(resolve => setTimeout(resolve, ms));
+  }
+
+  /**
    * 上传图片到掘金（完整 5 步流程）
+   * 包含重试逻辑以处理并发限制
    * @param imageBuffer 图片二进制数据
    * @param extension 图片扩展名（如 png, jpg）
    * @returns 图片访问 URL
@@ -1276,24 +1311,51 @@ export class JuejinApiClient {
   async uploadImage(imageBuffer: Buffer, extension: string): Promise<string> {
     log(`开始上传图片，大小: ${imageBuffer.length} bytes, 扩展名: ${extension}`);
 
-    // Step 1: 获取 STS Token
-    const token = await this.getImagexToken();
+    const maxRetries = 3;
+    let lastError: Error | null = null;
 
-    // Step 2: 申请上传地址
-    const uploadInfo = await this.applyImageUpload(token);
-    log("获取上传地址:", uploadInfo.storeUri);
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        // Step 1: 获取 STS Token
+        const token = await this.getImagexToken();
 
-    // Step 3: 上传图片到 TOS
-    await this.uploadToTos(imageBuffer, uploadInfo);
+        // Step 2: 申请上传地址（带重试延时）
+        if (attempt > 1) {
+          log(`重试第 ${attempt} 次，等待 ${attempt * 500}ms...`);
+          await this.delay(attempt * 500);
+        }
+        
+        const uploadInfo = await this.applyImageUpload(token);
+        log("获取上传地址:", uploadInfo.storeUri);
 
-    // Step 4: 提交上传结果
-    const imageUri = await this.commitImageUpload(token, uploadInfo.sessionKey);
+        // Step 3: 上传图片到 TOS
+        await this.uploadToTos(imageBuffer, uploadInfo);
 
-    // Step 5: 获取图片 URL
-    const imageUrl = await this.getImageUrl(imageUri);
-    log("图片上传成功:", imageUrl.substring(0, 100) + "...");
+        // Step 4: 提交上传结果
+        const imageUri = await this.commitImageUpload(token, uploadInfo.sessionKey);
 
-    return imageUrl;
+        // Step 5: 获取图片 URL
+        const imageUrl = await this.getImageUrl(imageUri);
+        log("图片上传成功:", imageUrl.substring(0, 100) + "...");
+
+        return imageUrl;
+      } catch (error) {
+        lastError = error instanceof Error ? error : new Error(String(error));
+        log(`上传失败 (尝试 ${attempt}/${maxRetries}):`, lastError.message);
+        
+        // 如果是最后一次尝试，不再重试
+        if (attempt === maxRetries) {
+          break;
+        }
+        
+        // 如果错误是认证相关的，清除缓存的 token
+        if (lastError.message.includes("认证") || lastError.message.includes("token") || lastError.message.includes("Token")) {
+          this.stsToken = null;
+        }
+      }
+    }
+
+    throw lastError || new Error("图片上传失败：未知错误");
   }
 }
 

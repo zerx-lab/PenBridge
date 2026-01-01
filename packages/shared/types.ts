@@ -240,7 +240,7 @@ export interface ExportedAIModel {
     streaming?: { supported: boolean; enabled: boolean };
     functionCalling?: { supported: boolean };
     vision?: { supported: boolean };
-    aiLoop?: { maxLoopCount: number };
+    aiLoop?: { maxLoopCount: number; unlimitedLoop?: boolean };
   };
   createdAt: string;
   updatedAt: string;

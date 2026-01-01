@@ -2300,6 +2300,7 @@ function AIConfigSettings() {
       },
       aiLoop: {
         maxLoopCount: 20,
+        unlimitedLoop: false,
       },
     },
   });
@@ -2432,6 +2433,7 @@ function AIConfigSettings() {
     },
     aiLoop: {
       maxLoopCount: 20,
+      unlimitedLoop: false,
     },
   };
 
@@ -3089,7 +3091,7 @@ function AIConfigSettings() {
                       </div>
                       <div className="space-y-2">
                         <Label htmlFor="model-maxTokens" className="text-xs text-muted-foreground">
-                          Max Tokens
+                          最大输出 Tokens
                         </Label>
                         <Input
                           id="model-maxTokens"
@@ -3246,13 +3248,16 @@ function AIConfigSettings() {
                       </div>
                     </div>
 
-                    {/* AI Loop 配置 */}
+                    {/* 自动多步推理配置 */}
                     <div className="space-y-2 p-3 rounded-md bg-muted/50">
                       <div className="flex items-center justify-between">
                         <Label htmlFor="ailoop-maxcount" className="text-sm font-normal">
-                          AI Loop 最大循环次数
+                          自动多步推理次数上限
                         </Label>
                       </div>
+                      <p className="text-xs text-muted-foreground">
+                        AI 在处理复杂任务时，可能需要多次调用工具并自动继续推理
+                      </p>
                       <div className="flex items-center gap-2">
                         <Input
                           id="ailoop-maxcount"
@@ -3268,19 +3273,52 @@ function AIConfigSettings() {
                               ...modelForm,
                               capabilities: {
                                 ...modelForm.capabilities,
-                                aiLoop: { maxLoopCount: clampedValue },
+                                aiLoop: { ...modelForm.capabilities.aiLoop, maxLoopCount: clampedValue },
                               },
                             });
                           }}
                           className="w-24"
+                          disabled={modelForm.capabilities.aiLoop.unlimitedLoop}
                         />
                         <span className="text-xs text-muted-foreground">
-                          (1-100, 防止死循环)
+                          (1-100)
                         </span>
                       </div>
-                      <p className="text-xs text-muted-foreground">
-                        AI 在对话中可以连续执行工具调用的最大次数，用于 Agent 式多步任务
-                      </p>
+                      
+                      {/* 不限制循环次数开关 */}
+                      <div className="flex items-center justify-between pt-2 border-t border-dashed">
+                        <div className="flex-1">
+                          <Label htmlFor="unlimited-loop" className="text-sm font-normal text-destructive">
+                            不限制推理次数
+                          </Label>
+                          <p className="text-xs text-muted-foreground mt-1">
+                            允许 AI 无限次调用工具，直到任务完成
+                          </p>
+                        </div>
+                        <Switch
+                          id="unlimited-loop"
+                          checked={modelForm.capabilities.aiLoop.unlimitedLoop}
+                          onCheckedChange={(checked) => setModelForm({
+                            ...modelForm,
+                            capabilities: {
+                              ...modelForm.capabilities,
+                              aiLoop: { ...modelForm.capabilities.aiLoop, unlimitedLoop: checked },
+                            },
+                          })}
+                        />
+                      </div>
+                      {modelForm.capabilities.aiLoop.unlimitedLoop && (
+                        <div className="p-2 rounded-md bg-destructive/10 border border-destructive/20">
+                          <p className="text-xs text-destructive font-medium">
+                            警告：启用此选项存在风险
+                          </p>
+                          <ul className="text-xs text-destructive/80 mt-1 list-disc list-inside space-y-0.5">
+                            <li>可能导致 AI 陷入无限循环</li>
+                            <li>可能产生大量 API 调用费用</li>
+                            <li>建议仅在受信任的任务中使用</li>
+                          </ul>
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>

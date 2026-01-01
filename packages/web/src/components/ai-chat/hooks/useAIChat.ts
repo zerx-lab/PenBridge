@@ -283,9 +283,11 @@ export function useAIChat(options: UseAIChatOptions): UseAIChatReturn {
     }
     
     const maxLoopCount = selectedModel.capabilities?.aiLoop?.maxLoopCount || DEFAULT_MAX_LOOP_COUNT;
+    const unlimitedLoop = selectedModel.capabilities?.aiLoop?.unlimitedLoop || false;
     
-    if (loopCount >= maxLoopCount) {
-      setError(`已达到最大循环次数 (${maxLoopCount})，任务可能过于复杂`);
+    // 仅在未启用无限循环模式时检查循环次数
+    if (!unlimitedLoop && loopCount >= maxLoopCount) {
+      setError(`已达到最大推理次数 (${maxLoopCount})，任务可能过于复杂`);
       // 重置加载状态，允许用户继续发送新消息
       setIsLoading(false);
       setIsStreaming(false);
@@ -1210,6 +1212,7 @@ export function useAIChat(options: UseAIChatOptions): UseAIChatReturn {
     createNewSession,
     currentLoopCount,
     maxLoopCount: selectedModel?.capabilities?.aiLoop?.maxLoopCount || DEFAULT_MAX_LOOP_COUNT,
+    unlimitedLoop: selectedModel?.capabilities?.aiLoop?.unlimitedLoop || false,
     // 待确认变更
     pendingChanges,
     currentPendingChange,

@@ -143,6 +143,8 @@ export class AIModel {
     aiLoop?: {
       // 最大循环次数（防止死循环）
       maxLoopCount: number;
+      // 不限制循环次数（危险：可能导致无限循环和高额 API 费用）
+      unlimitedLoop?: boolean;
     };
   };
 

@@ -282,7 +282,7 @@ export interface AIModelInfo {
     };
     streaming?: { supported: boolean; enabled: boolean };
     functionCalling?: { supported: boolean };
-    aiLoop?: { maxLoopCount: number };
+    aiLoop?: { maxLoopCount: number; unlimitedLoop?: boolean };
   };
 }
 
@@ -351,6 +351,7 @@ export interface UseAIChatReturn {
   // 当前循环状态
   currentLoopCount: number;
   maxLoopCount: number;
+  unlimitedLoop: boolean;
   
   // 待确认变更
   pendingChanges: PendingChange[];

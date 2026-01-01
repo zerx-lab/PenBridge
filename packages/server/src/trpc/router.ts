@@ -39,6 +39,8 @@ import {
   previewZipData,
   getImageStats,
 } from "../services/dataExportImport";
+import { processArticleImages, hasImagesToUpload } from "../services/imageUpload";
+import * as path from "path";
 import { AppDataSource } from "../db";
 import { Article, ArticleStatus } from "../entities/Article";
 import { User } from "../entities/User";
@@ -1299,10 +1301,44 @@ export const appRouter = t.router({
             existingDraftId: article.juejinDraftId || "无",
           });
 
+          // 处理文章中的图片，上传到掘金 ImageX
+          const UPLOAD_DIR = path.join(process.cwd(), "data", "uploads");
+          let contentToPublish = article.content;
+          
+          if (hasImagesToUpload(article.content, "juejin")) {
+            console.log("[Juejin] 检测到需要上传的图片，开始上传到掘金...");
+            try {
+              const { content: processedContent, results } = await processArticleImages(
+                article.content,
+                client,
+                UPLOAD_DIR,
+                "juejin"
+              );
+              contentToPublish = processedContent;
+              
+              const successCount = results.filter(r => r.success).length;
+              console.log(`[Juejin] 图片上传完成: ${successCount}/${results.length} 成功`);
+              
+              // 如果有图片上传失败，给出警告但继续发布
+              if (successCount < results.length) {
+                console.warn(`[Juejin] 警告: ${results.length - successCount} 张图片上传失败`);
+              }
+            } catch (imageError) {
+              const errorMsg = imageError instanceof Error ? imageError.message : "未知错误";
+              console.error("[Juejin] 图片上传失败:", errorMsg);
+              throw new TRPCError({
+                code: "INTERNAL_SERVER_ERROR",
+                message: `图片上传失败: ${errorMsg}`,
+              });
+            }
+          } else {
+            console.log("[Juejin] 文章中没有需要上传的本地图片");
+          }
+
           // 一键发布文章（复用已有草稿ID）
           const result = await client.publishArticleOneClick({
             title: article.title,
-            markContent: article.content,
+            markContent: contentToPublish,
             briefContent: article.juejinBriefContent,
             categoryId: article.juejinCategoryId,
             tagIds: article.juejinTagIds,
@@ -1399,6 +1435,33 @@ export const appRouter = t.router({
         try {
           const client = createJuejinApiClient(cookies);
 
+          // 处理文章中的图片，上传到掘金 ImageX
+          const UPLOAD_DIR = path.join(process.cwd(), "data", "uploads");
+          let contentToSync = article.content;
+          
+          if (hasImagesToUpload(article.content, "juejin")) {
+            console.log("[Juejin] 同步草稿: 检测到需要上传的图片，开始上传到掘金...");
+            try {
+              const { content: processedContent, results } = await processArticleImages(
+                article.content,
+                client,
+                UPLOAD_DIR,
+                "juejin"
+              );
+              contentToSync = processedContent;
+              
+              const successCount = results.filter(r => r.success).length;
+              console.log(`[Juejin] 同步草稿: 图片上传完成: ${successCount}/${results.length} 成功`);
+            } catch (imageError) {
+              const errorMsg = imageError instanceof Error ? imageError.message : "未知错误";
+              console.error("[Juejin] 同步草稿: 图片上传失败:", errorMsg);
+              throw new TRPCError({
+                code: "INTERNAL_SERVER_ERROR",
+                message: `图片上传失败: ${errorMsg}`,
+              });
+            }
+          }
+
           // 创建或更新草稿
           let draftId = article.juejinDraftId;
 
@@ -1412,7 +1475,7 @@ export const appRouter = t.router({
           await client.updateDraft({
             id: draftId,
             title: article.title,
-            markContent: article.content,
+            markContent: contentToSync,
             briefContent: article.juejinBriefContent || "",
             categoryId: article.juejinCategoryId || "0",
             tagIds: article.juejinTagIds || [],
@@ -1858,6 +1921,7 @@ export const appRouter = t.router({
             // AI Loop 配置
             aiLoop: z.object({
               maxLoopCount: z.number().min(1).max(100).nullish().transform(val => val ?? 20),
+              unlimitedLoop: z.boolean().optional(),
             }).optional(),
           }).optional(),
         })
@@ -1936,6 +2000,7 @@ export const appRouter = t.router({
             // AI Loop 配置
             aiLoop: z.object({
               maxLoopCount: z.number().min(1).max(100).nullish().transform(val => val ?? 20),
+              unlimitedLoop: z.boolean().optional(),
             }).optional(),
           }).optional(),
         })

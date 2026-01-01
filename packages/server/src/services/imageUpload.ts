@@ -31,7 +31,8 @@ export type PlatformType = "tencent" | "juejin";
 const DEBUG = true;
 
 // 并发上传配置
-const MAX_CONCURRENT_UPLOADS = 36; // 最大并发数
+// 注意：掘金 ImageX API 对并发请求有限制，设置过高可能导致"申请上传地址失败"
+const MAX_CONCURRENT_UPLOADS = 5; // 最大并发数（降低以避免 API 限流）
 
 function log(...args: unknown[]) {
   if (DEBUG) {
@@ -79,10 +80,10 @@ async function runWithConcurrency<T>(
   return results;
 }
 
-// 本地服务器图片 URL 模式
-const LOCAL_IMAGE_PATTERN = /!\[([^\]]*)\]\((http:\/\/localhost:\d+\/api\/upload\/[^)]+)\)/g;
-// 也匹配相对路径的图片
-const RELATIVE_IMAGE_PATTERN = /!\[([^\]]*)\]\((\/api\/upload\/[^)]+)\)/g;
+// 本地服务器图片 URL 模式（兼容旧格式 /api/upload/ 和新格式 /uploads/）
+const LOCAL_IMAGE_PATTERN = /!\[([^\]]*)\]\((http:\/\/localhost:\d+\/(?:api\/)?uploads?\/[^)]+)\)/g;
+// 也匹配相对路径的图片（兼容 /api/upload/ 和 /uploads/）
+const RELATIVE_IMAGE_PATTERN = /!\[([^\]]*)\]\((\/(?:api\/)?uploads?\/[^)]+)\)/g;
 // Base64 编码图片模式
 const BASE64_IMAGE_PATTERN = /!\[([^\]]*)\]\((data:image\/([a-zA-Z]+);base64,([^)]+))\)/g;
 // 外部图片 URL 模式（用于检测需要上传的外部图片）
@@ -127,7 +128,7 @@ export interface ImageUploadResult {
 /**
  * 处理文章内容中的图片
  * 将本地图片上传到指定平台，并替换 URL
- * 
+ *
  * @param content 文章内容（Markdown）
  * @param client 图片上传客户端（支持 TencentApiClient 或 JuejinApiClient）
  * @param uploadDir 本地上传目录
@@ -397,8 +398,11 @@ export async function processArticleImages(
  */
 function resolveLocalFilePath(url: string, uploadDir: string): string | null {
   try {
-    // URL 格式: http://localhost:3000/api/upload/{articleId}/{filename}
-    // 或 /api/upload/{articleId}/{filename}
+    // URL 格式:
+    // - http://localhost:3000/api/upload/{articleId}/{filename} (旧格式)
+    // - http://localhost:3000/uploads/{articleId}/{filename} (新格式)
+    // - /api/upload/{articleId}/{filename} (旧格式相对路径)
+    // - /uploads/{articleId}/{filename} (新格式相对路径)
 
     let urlPath: string;
 
@@ -409,8 +413,8 @@ function resolveLocalFilePath(url: string, uploadDir: string): string | null {
       urlPath = url;
     }
 
-    // 解析路径: /api/upload/{articleId}/{filename}
-    const match = urlPath.match(/\/api\/upload\/(\d+)\/(.+)/);
+    // 解析路径: /api/upload/{articleId}/{filename} 或 /uploads/{articleId}/{filename}
+    const match = urlPath.match(/\/(?:api\/)?uploads?\/(\d+)\/(.+)/);
     if (!match) {
       log(`无法解析 URL 路径: ${urlPath}`);
       return null;
@@ -443,7 +447,7 @@ export function hasLocalImages(content: string): boolean {
 /**
  * 检查内容中是否有需要上传到目标平台的图片
  * 包括：本地图片、base64 图片、其他平台的外部图片
- * 
+ *
  * @param content Markdown 内容
  * @param platform 目标平台
  */
@@ -452,7 +456,7 @@ export function hasImagesToUpload(content: string, platform: PlatformType): bool
   if (hasLocalImages(content)) {
     return true;
   }
-  
+
   // 检查是否有需要上传的外部图片（非目标平台托管的图片）
   return hasExternalImagesToUpload(content, platform);
 }
@@ -489,7 +493,7 @@ export function countLocalImages(content: string): number {
 export function hasExternalImagesToUpload(content: string, platform: PlatformType): boolean {
   const pattern = new RegExp(EXTERNAL_IMAGE_PATTERN.source, "g");
   let match;
-  
+
   while ((match = pattern.exec(content)) !== null) {
     const url = match[2];
     // 跳过已经托管在目标平台的图片
@@ -497,7 +501,7 @@ export function hasExternalImagesToUpload(content: string, platform: PlatformTyp
       return true;
     }
   }
-  
+
   return false;
 }
 
@@ -513,7 +517,7 @@ export function getExternalImagesToUpload(
   const images: Array<{ fullMatch: string; alt: string; url: string }> = [];
   const pattern = new RegExp(EXTERNAL_IMAGE_PATTERN.source, "g");
   let match;
-  
+
   while ((match = pattern.exec(content)) !== null) {
     const url = match[2];
     // 跳过已经托管在目标平台的图片
@@ -525,6 +529,6 @@ export function getExternalImagesToUpload(
       });
     }
   }
-  
+
   return images;
 }
