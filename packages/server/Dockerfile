@@ -10,21 +10,30 @@
 # ===== 构建阶段 - 前端 =====
 FROM oven/bun:1 AS web-builder
 
+# 接收版本号构建参数
+ARG VERSION=1.0.0
+
 WORKDIR /app
 
 # 复制前端 package.json 和 lock 文件
 COPY packages/web/package.json packages/web/bun.lock* ./packages/web/
 
-# 安装前端依赖
+# 更新 package.json 中的版本号（用于 Vite 构建时注入）
 WORKDIR /app/packages/web
+RUN sed -i "s/\"version\": \"[^\"]*\"/\"version\": \"${VERSION}\"/" package.json
+
+# 安装前端依赖
 RUN bun install
 
 # 复制前端源代码
 WORKDIR /app
 COPY packages/web ./packages/web
 
-# 构建前端
+# 再次更新版本号（因为 COPY 会覆盖之前的修改）
 WORKDIR /app/packages/web
+RUN sed -i "s/\"version\": \"[^\"]*\"/\"version\": \"${VERSION}\"/" package.json
+
+# 构建前端
 RUN bun run build
 
 # ===== 构建阶段 - 后端 =====
