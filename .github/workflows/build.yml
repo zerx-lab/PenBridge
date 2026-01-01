@@ -72,8 +72,39 @@ jobs:
         run: bun install
         working-directory: packages/web
 
-      - name: Build web
-        run: bun run build:web
+      - name: Build web (for Electron)
+        run: bun run build:web:electron
+
+      - name: Verify web build uses relative paths
+        run: |
+          # 检查 index.html 是否存在
+          if [ ! -f packages/web/dist/index.html ]; then
+            echo "ERROR: packages/web/dist/index.html not found!"
+            exit 1
+          fi
+          
+          # 检查是否使用相对路径（./assets/）而不是绝对路径（/assets/）
+          if grep -q 'src="/assets/' packages/web/dist/index.html; then
+            echo "ERROR: Build uses absolute paths (/assets/). This will break Electron!"
+            echo "Make sure BUILD_TARGET=electron is set during build."
+            grep 'src="/' packages/web/dist/index.html
+            exit 1
+          fi
+          
+          if grep -q 'href="/assets/' packages/web/dist/index.html; then
+            echo "ERROR: Build uses absolute paths (/assets/). This will break Electron!"
+            echo "Make sure BUILD_TARGET=electron is set during build."
+            grep 'href="/' packages/web/dist/index.html
+            exit 1
+          fi
+          
+          # 验证使用了相对路径
+          if grep -q 'src="./assets/' packages/web/dist/index.html; then
+            echo "OK: Build correctly uses relative paths (./assets/)"
+          else
+            echo "WARNING: Could not verify relative paths in index.html"
+            cat packages/web/dist/index.html
+          fi
 
       - name: Upload web build artifact
         uses: actions/upload-artifact@v4
@@ -81,6 +112,7 @@ jobs:
           name: web-dist
           path: packages/web/dist
           retention-days: 1
+          if-no-files-found: error
 
   # 构建 Docker 镜像（包含前端和后端）
   build-docker:
@@ -131,7 +163,7 @@ jobs:
           build-args: |
             VERSION=${{ needs.prepare.outputs.version }}
 
-  # macOS 构建
+  # macOS 构建（使用 electron-builder）
   build-macos:
     needs: [prepare, build-web]
     runs-on: macos-latest
@@ -150,6 +182,19 @@ jobs:
           name: web-dist
           path: electron/web
 
+      - name: Verify downloaded web build
+        run: |
+          if [ ! -f electron/web/index.html ]; then
+            echo "ERROR: electron/web/index.html not found!"
+            exit 1
+          fi
+          # 再次验证相对路径
+          if grep -q 'src="/assets/' electron/web/index.html; then
+            echo "ERROR: Web build uses absolute paths!"
+            exit 1
+          fi
+          echo "OK: Web build verified"
+
       - name: Update Electron package version
         run: |
           VERSION="${{ needs.prepare.outputs.version }}"
@@ -164,20 +209,34 @@ jobs:
         run: npm run build
         working-directory: electron
 
-      - name: Package for macOS (x64)
-        run: npx electron-forge make --arch=x64
+      - name: Package for macOS (x64 + arm64)
+        run: npm run dist:mac
         working-directory: electron
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Package for macOS (arm64)
-        run: npx electron-forge make --arch=arm64
-        working-directory: electron
+      - name: Verify macOS build artifacts exist
+        run: |
+          if [ -z "$(find electron/release -name '*.zip' -o -name '*.dmg' 2>/dev/null)" ]; then
+            echo "ERROR: No macOS build artifacts found!"
+            ls -la electron/release/ || true
+            exit 1
+          fi
+          echo "OK: macOS build artifacts found"
+          find electron/release -type f \( -name '*.zip' -o -name '*.dmg' \)
 
       - name: Upload macOS artifacts
         uses: actions/upload-artifact@v4
         with:
           name: macos-build
-          path: electron/out/make/**/*
+          path: |
+            electron/release/*.dmg
+            electron/release/*.zip
+            electron/release/*.yml
+            electron/release/*.yaml
+            electron/release/*.blockmap
           retention-days: 7
+          if-no-files-found: error
 
   # Windows 构建（使用 electron-builder + NSIS 交互式安装程序）
   build-windows:
@@ -197,6 +256,21 @@ jobs:
         with:
           name: web-dist
           path: electron/web
+
+      - name: Verify downloaded web build
+        shell: pwsh
+        run: |
+          if (-not (Test-Path "electron/web/index.html")) {
+            Write-Error "ERROR: electron/web/index.html not found!"
+            exit 1
+          }
+          # 验证相对路径
+          $content = Get-Content "electron/web/index.html" -Raw
+          if ($content -match 'src="/assets/') {
+            Write-Error "ERROR: Web build uses absolute paths!"
+            exit 1
+          }
+          Write-Host "OK: Web build verified"
 
       - name: Update Electron package version
         shell: pwsh
@@ -221,6 +295,18 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Verify Windows build artifacts exist
+        shell: pwsh
+        run: |
+          $exeFiles = Get-ChildItem -Path "electron/release" -Filter "*.exe" -ErrorAction SilentlyContinue
+          if (-not $exeFiles) {
+            Write-Error "ERROR: No Windows .exe files found!"
+            Get-ChildItem -Path "electron/release" -ErrorAction SilentlyContinue
+            exit 1
+          }
+          Write-Host "OK: Windows build artifacts found"
+          $exeFiles | ForEach-Object { Write-Host $_.FullName }
+
       - name: Upload Windows artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -232,6 +318,7 @@ jobs:
             electron/release/*.yaml
             electron/release/*.blockmap
           retention-days: 7
+          if-no-files-found: error
 
   # Linux 构建（使用 electron-builder）
   build-linux:
@@ -251,6 +338,19 @@ jobs:
         with:
           name: web-dist
           path: electron/web
+
+      - name: Verify downloaded web build
+        run: |
+          if [ ! -f electron/web/index.html ]; then
+            echo "ERROR: electron/web/index.html not found!"
+            exit 1
+          fi
+          # 验证相对路径
+          if grep -q 'src="/assets/' electron/web/index.html; then
+            echo "ERROR: Web build uses absolute paths!"
+            exit 1
+          fi
+          echo "OK: Web build verified"
 
       - name: Update Electron package version
         run: |
@@ -278,6 +378,16 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Verify Linux build artifacts exist
+        run: |
+          if [ -z "$(find electron/release -name '*.AppImage' -o -name '*.deb' 2>/dev/null)" ]; then
+            echo "ERROR: No Linux build artifacts found!"
+            ls -la electron/release/ || true
+            exit 1
+          fi
+          echo "OK: Linux build artifacts found"
+          find electron/release -type f \( -name '*.AppImage' -o -name '*.deb' -o -name '*.rpm' \)
+
       - name: Upload Linux artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -289,6 +399,7 @@ jobs:
             electron/release/*.yml
             electron/release/*.yaml
           retention-days: 7
+          if-no-files-found: error
 
   # 部署到服务器
   deploy:
