@@ -22,6 +22,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # 复制已构建的后端产物
 COPY packages/server/dist/index.js ./index.js
 
+# 复制 prompts 目录
+COPY packages/server/src/prompts ./prompts
+
 # 复制已构建的前端产物到 public 目录
 COPY packages/web/dist ./public
 

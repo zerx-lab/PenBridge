@@ -20,28 +20,49 @@ let isServerRunning = false;
 /**
  * 获取服务器可执行文件路径
  * 使用 Bun 编译的独立二进制文件（无需 Node.js）
+ * 
+ * 支持多架构：根据当前运行的 CPU 架构选择对应的可执行文件
  */
 function getServerExecutablePath(): string | null {
-  // 查找 Bun 编译的二进制文件
-  const exeName = process.platform === "win32" ? "pen-bridge-server.exe" : "pen-bridge-server";
+  // 根据当前架构选择可执行文件名
+  const arch = process.arch; // 'x64', 'arm64', 'ia32', etc.
+  const platform = process.platform;
   
-  const possiblePaths = [
+  // 构建可执行文件名列表（按优先级）
+  const exeNames: string[] = [];
+  
+  if (platform === "win32") {
+    // Windows: 优先使用带架构后缀的文件名，然后是通用名
+    exeNames.push(`pen-bridge-server-${arch}.exe`);
+    exeNames.push("pen-bridge-server.exe");
+  } else {
+    // macOS / Linux: 优先使用带架构后缀的文件名，然后是通用名
+    exeNames.push(`pen-bridge-server-${arch}`);
+    exeNames.push("pen-bridge-server");
+  }
+  
+  // 可能的目录路径
+  const searchDirs = [
     // electron-builder asarUnpack 解包后的路径
-    path.join(process.resourcesPath, "app.asar.unpacked", "server", exeName),
+    path.join(process.resourcesPath, "app.asar.unpacked", "server"),
     // 备用路径
-    path.join(app.getAppPath().replace("app.asar", "app.asar.unpacked"), "server", exeName),
+    path.join(app.getAppPath().replace("app.asar", "app.asar.unpacked"), "server"),
     // 直接在 resources 目录
-    path.join(process.resourcesPath, "server", exeName),
+    path.join(process.resourcesPath, "server"),
     // 在 app 目录内
-    path.join(app.getAppPath(), "server", exeName),
+    path.join(app.getAppPath(), "server"),
   ];
   
-  console.log("[Local Server] 正在查找服务器可执行文件...");
+  console.log(`[Local Server] 正在查找服务器可执行文件 (arch: ${arch}, platform: ${platform})...`);
   
-  for (const p of possiblePaths) {
-    console.log(`[Local Server] 检查路径: ${p}, 存在: ${fs.existsSync(p)}`);
-    if (fs.existsSync(p)) {
-      return p;
+  // 遍历目录和文件名组合
+  for (const dir of searchDirs) {
+    for (const exeName of exeNames) {
+      const fullPath = path.join(dir, exeName);
+      console.log(`[Local Server] 检查路径: ${fullPath}, 存在: ${fs.existsSync(fullPath)}`);
+      if (fs.existsSync(fullPath)) {
+        return fullPath;
+      }
     }
   }
   

@@ -18,7 +18,6 @@ import { Drawer } from "antd";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
-import { Skeleton } from "@/components/ui/skeleton";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Tooltip,
@@ -29,95 +28,10 @@ import {
 import MilkdownEditor, { type MilkdownEditorRef } from "@/components/MilkdownEditor";
 import { TableOfContents, HeadingItem } from "@/components/TableOfContents";
 import { EditorSearchBox } from "@/components/EditorSearchBox";
+import { EditorSkeleton } from "@/components/EditorSkeleton";
+import { SettingItem } from "@/components/SettingItem";
 import { countWords, formatWordCountDetail } from "@/utils/wordCount";
 import { AIChatPanel } from "@/components/ai-chat/AIChatPanel";
-
-// 编辑器骨架屏组件 - Notion 风格
-function EditorSkeleton() {
-  return (
-    <div className="space-y-4 animate-in fade-in-50 duration-300">
-      {/* 模拟段落块 */}
-      <div className="space-y-2">
-        <Skeleton className="h-4 w-full" />
-        <Skeleton className="h-4 w-[95%]" />
-        <Skeleton className="h-4 w-[88%]" />
-      </div>
-
-      {/* 空行 */}
-      <div className="h-2" />
-
-      {/* 模拟第二段 */}
-      <div className="space-y-2">
-        <Skeleton className="h-4 w-[92%]" />
-        <Skeleton className="h-4 w-full" />
-        <Skeleton className="h-4 w-[75%]" />
-      </div>
-
-      {/* 空行 */}
-      <div className="h-2" />
-
-      {/* 模拟代码块或引用 */}
-      <div className="pl-4 border-l-2 border-muted space-y-2">
-        <Skeleton className="h-4 w-[85%]" />
-        <Skeleton className="h-4 w-[70%]" />
-      </div>
-
-      {/* 空行 */}
-      <div className="h-2" />
-
-      {/* 模拟第三段 */}
-      <div className="space-y-2">
-        <Skeleton className="h-4 w-[90%]" />
-        <Skeleton className="h-4 w-[82%]" />
-        <Skeleton className="h-4 w-[60%]" />
-      </div>
-
-      {/* 加载提示 */}
-      <div className="flex items-center gap-2 pt-4 text-sm text-muted-foreground">
-        <div className="h-1 w-1 rounded-full bg-muted-foreground/50 animate-pulse" />
-        <div className="h-1 w-1 rounded-full bg-muted-foreground/50 animate-pulse [animation-delay:150ms]" />
-        <div className="h-1 w-1 rounded-full bg-muted-foreground/50 animate-pulse [animation-delay:300ms]" />
-        <span className="ml-1">正在加载内容...</span>
-      </div>
-    </div>
-  );
-}
-
-// Notion 风格设置项组件
-interface SettingItemProps {
-  icon: ReactNode;
-  label: string;
-  description?: string;
-  action?: ReactNode;
-  onClick?: () => void;
-}
-
-function SettingItem({ icon, label, description, action, onClick }: SettingItemProps) {
-  const content = (
-    <div className="flex items-center justify-between py-2.5 px-2 rounded-md hover:bg-accent/50 transition-colors group -mx-2">
-      <div className="flex items-center gap-3">
-        <span className="text-muted-foreground group-hover:text-foreground transition-colors">
-          {icon}
-        </span>
-        <span className="text-sm">{label}</span>
-      </div>
-      {action && <div className="flex items-center">{action}</div>}
-      {description && !action && (
-        <span className="text-sm text-muted-foreground">{description}</span>
-      )}
-    </div>
-  );
-
-  if (onClick) {
-    return (
-      <button className="w-full text-left" onClick={onClick}>
-        {content}
-      </button>
-    );
-  }
-
-  return content;
-}
 
 // 编辑器宽度设置
 const WIDTH_STORAGE_KEY = "editor-fullwidth-preference";

@@ -68,6 +68,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # 从后端构建阶段复制构建产物
 COPY --from=server-builder /app/dist ./dist
 
+# 从后端构建阶段复制 prompts 目录
+COPY --from=server-builder /app/src/prompts ./prompts
+
 # 从前端构建阶段复制构建产物到 public 目录
 COPY --from=web-builder /app/packages/web/dist ./public
 

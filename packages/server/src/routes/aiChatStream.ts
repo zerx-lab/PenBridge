@@ -7,7 +7,8 @@ import { streamSSE } from "hono/streaming";
 import { AppDataSource } from "../db";
 import { AIProvider, AIModel } from "../entities/AIProvider";
 import { validateSession } from "../services/adminAuth";
-import { formatToolsForAPI, getToolExecutionLocation } from "../services/aiTools";
+import { formatToolsForAPI, getToolExecutionLocation, getAllToolDefinitions } from "../services/aiTools";
+import { buildSystemPrompt, type ArticleContext } from "../services/promptTemplate";
 
 export const aiChatStreamRouter = new Hono();
 
@@ -125,34 +126,60 @@ aiChatStreamRouter.post("/", async (c) => {
     let systemMessage = messages.find((m: any) => m.role === "system");
     const userMessages = messages.filter((m: any) => m.role !== "system");
 
-    // 如果有文章上下文，添加到系统提示中
-    if (articleContext) {
-      // 基础文章信息
-      let contextInfo = `\n\n当前用户正在编辑一篇文章：
-- 文章标题: ${articleContext.title || "无标题"}
-- 文章字数: ${articleContext.contentLength || 0} 字
-- 文章ID: ${articleContext.articleId}`;
+    // 使用模板服务构建系统提示词
+    // 如果前端没有提供 systemMessage，使用模板生成完整的系统提示词
+    // 如果前端提供了 systemMessage，将模板生成的上下文信息追加到末尾
+    const toolDefinitions = shouldEnableTools ? getAllToolDefinitions() : [];
+    const toolInfoList = toolDefinitions.map(t => ({
+      name: t.function.name,
+      description: t.function.description.split("\n")[0], // 取第一行作为简要描述
+    }));
 
-      // 只有在工具调用启用时才提及工具
-      if (shouldEnableTools) {
-        contextInfo += `
+    // 构建文章上下文（如果有）
+    const articleContextForPrompt = articleContext ? {
+      title: articleContext.title || "无标题",
+      contentLength: articleContext.contentLength || 0,
+      articleId: articleContext.articleId,
+    } : undefined;
 
-你可以使用工具来读取和修改文章内容。
-
-**重要提示**：read_article 工具返回的内容包含行号前缀（格式："行号 | 内容"）。行号仅用于定位，在使用 replace_content 等工具时，请勿在 search 参数中包含行号前缀，只提供实际的文本内容。`;
-      }
-
-      if (systemMessage) {
+    if (systemMessage) {
+      // 前端提供了自定义系统提示词，追加上下文信息
+      const additionalContext = buildSystemPrompt({
+        articleContext: articleContextForPrompt,
+        tools: shouldEnableTools ? toolInfoList : undefined,
+        includeEnvironment: false, // 不重复添加环境信息
+      });
+      
+      // 只追加文章上下文和工具信息部分（跳过基础提示词）
+      // 基础提示词已在前端的 systemMessage 中
+      if (articleContextForPrompt || shouldEnableTools) {
+        const contextParts: string[] = [];
+        
+        if (articleContextForPrompt) {
+          contextParts.push(`\n\n# 当前文章上下文\n\n你正在协助用户编辑一篇文章：\n<article-context>\n  标题: ${articleContextForPrompt.title}\n  字数: ${articleContextForPrompt.contentLength} 字\n  文章ID: ${articleContextForPrompt.articleId}\n</article-context>`);
+        }
+        
+        if (shouldEnableTools && toolInfoList.length > 0) {
+          contextParts.push(`\n\n<important>\nread_article 工具返回的内容包含行号前缀（格式："行号 | 内容"）。行号仅用于定位，在使用 replace_content 等工具时，请勿在 search 参数中包含行号前缀，只提供实际的文本内容。\n</important>`);
+        }
+        
         systemMessage = {
           ...systemMessage,
-          content: systemMessage.content + contextInfo,
-        };
-      } else {
-        systemMessage = {
-          role: "system",
-          content: `你是一个智能写作助手，可以帮助用户改进文章、回答问题、执行各种任务。${contextInfo}`,
+          content: systemMessage.content + contextParts.join(""),
         };
       }
+    } else {
+      // 没有自定义系统提示词，使用模板生成完整的系统提示词
+      const fullSystemPrompt = buildSystemPrompt({
+        articleContext: articleContextForPrompt,
+        tools: shouldEnableTools ? toolInfoList : undefined,
+        includeEnvironment: true,
+      });
+      
+      systemMessage = {
+        role: "system",
+        content: fullSystemPrompt,
+      };
     }
 
     // 组装最终消息

@@ -7,12 +7,9 @@ import {
   AlertCircle,
   Calendar,
   ArrowRight,
-  ExternalLink,
   RefreshCw,
   AlertTriangle,
-  FileEdit,
   Send,
-  XCircle,
   Loader2,
   CloudUpload,
   Coffee,
@@ -24,177 +21,11 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
 import { trpc } from "@/utils/trpc";
 import { notification } from "antd";
-
-// 格式化相对时间
-function formatRelativeTime(date: Date | string): string {
-  const now = new Date();
-  const target = new Date(date);
-  const diffMs = now.getTime() - target.getTime();
-  const diffMins = Math.floor(diffMs / (1000 * 60));
-  const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
-  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-
-  if (diffMins < 1) return "刚刚";
-  if (diffMins < 60) return `${diffMins}分钟前`;
-  if (diffHours < 24) return `${diffHours}小时前`;
-  if (diffDays < 7) return `${diffDays}天前`;
-  return target.toLocaleDateString("zh-CN");
-}
-
-// 格式化定时时间
-function formatScheduleTime(date: Date | string): string {
-  const target = new Date(date);
-  const now = new Date();
-  const diffMs = target.getTime() - now.getTime();
-  const diffMins = Math.floor(diffMs / (1000 * 60));
-  const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
-  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-
-  if (diffMs < 0) return "已过期";
-  if (diffMins < 60) return `${diffMins}分钟后`;
-  if (diffHours < 24) return `${diffHours}小时后`;
-  if (diffDays < 7) return `${diffDays}天后`;
-  return target.toLocaleDateString("zh-CN", {
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
-
-// 状态徽章组件
-function StatusBadge({ status }: { status: string }) {
-  const config: Record<
-    string,
-    { label: string; variant: "default" | "secondary" | "destructive" | "outline" }
-  > = {
-    draft: { label: "草稿", variant: "secondary" },
-    scheduled: { label: "待发布", variant: "outline" },
-    published: { label: "已发布", variant: "default" },
-    pending: { label: "审核中", variant: "outline" },
-    failed: { label: "失败", variant: "destructive" },
-  };
-
-  const { label, variant } = config[status] || { label: status, variant: "secondary" };
-
-  return <Badge variant={variant} className="text-xs h-5">{label}</Badge>;
-}
-
-// 最近文章列表项
-function RecentArticleItem({
-  article,
-}: {
-  article: {
-    id: number;
-    title: string;
-    status: string;
-    updatedAt: string;
-    tencentArticleUrl?: string;
-  };
-}) {
-  const navigate = useNavigate();
-
-  const handleClick = () => {
-    navigate({
-      to: "/articles/$id/edit",
-      params: { id: String(article.id) },
-    });
-  };
-
-  const handleExternalLinkClick = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (article.tencentArticleUrl) {
-      // 优先使用 Electron API 在系统默认浏览器中打开
-      if (window.electronAPI?.shell?.openExternal) {
-        window.electronAPI.shell.openExternal(article.tencentArticleUrl);
-      } else {
-        // 回退到 window.open（Web 环境）
-        window.open(article.tencentArticleUrl, "_blank", "noopener,noreferrer");
-      }
-    }
-  };
-
-  return (
-    <div
-      onClick={handleClick}
-      className="flex items-center justify-between py-2 px-2 rounded hover:bg-muted/50 transition-colors cursor-pointer group"
-    >
-      <div className="flex items-center gap-2 min-w-0 flex-1">
-        <FileEdit className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-        <div className="min-w-0 flex-1">
-          <p className="text-sm truncate group-hover:text-primary transition-colors">
-            {article.title || "无标题"}
-          </p>
-        </div>
-      </div>
-      <div className="flex items-center gap-2 shrink-0">
-        <span className="text-xs text-muted-foreground hidden sm:inline">
-          {formatRelativeTime(article.updatedAt)}
-        </span>
-        <StatusBadge status={article.status} />
-        {article.tencentArticleUrl && (
-          <button
-            onClick={handleExternalLinkClick}
-            className="text-muted-foreground hover:text-primary"
-            title="在腾讯云查看"
-          >
-            <ExternalLink className="h-3 w-3" />
-          </button>
-        )}
-      </div>
-    </div>
-  );
-}
-
-// 定时任务列表项
-function ScheduledTaskItem({
-  task,
-}: {
-  task: {
-    id: number;
-    scheduledAt: string;
-    status: string;
-    article?: { id: number; title: string };
-  };
-}) {
-  const statusConfig: Record<
-    string,
-    { icon: React.ElementType; color: string; label: string }
-  > = {
-    pending: { icon: Clock, color: "text-blue-500", label: "等待" },
-    running: { icon: Loader2, color: "text-orange-500", label: "执行中" },
-    completed: { icon: CheckCircle, color: "text-green-500", label: "完成" },
-    failed: { icon: XCircle, color: "text-red-500", label: "失败" },
-    cancelled: { icon: XCircle, color: "text-muted-foreground", label: "取消" },
-  };
-
-  const { icon: StatusIcon, color } = statusConfig[task.status] || statusConfig.pending;
-
-  return (
-    <Link
-      to="/articles/$id/edit"
-      params={{ id: String(task.article?.id || 0) }}
-      className="block"
-    >
-      <div className="flex items-center justify-between py-2 px-2 rounded hover:bg-muted/50 transition-colors cursor-pointer group">
-        <div className="flex items-center gap-2 min-w-0 flex-1">
-          <StatusIcon className={`h-3.5 w-3.5 shrink-0 ${color}`} />
-          <p className="text-sm truncate group-hover:text-primary transition-colors">
-            {task.article?.title || "未知文章"}
-          </p>
-        </div>
-        <span className="text-xs text-muted-foreground shrink-0">
-          {formatScheduleTime(task.scheduledAt)}
-        </span>
-      </div>
-    </Link>
-  );
-}
+import { RecentArticleItem, ScheduledTaskItem } from "@/components/dashboard";
 
 function HomePage() {
   const navigate = useNavigate();
@@ -246,7 +77,7 @@ function HomePage() {
   const { data: pendingTasks, isLoading: tasksLoading } =
     trpc.schedule.listPending.useQuery();
 
-  // 腾讯云社区状态（使用上面的 authStatus）
+  // 腾讯云社区状态
   const tencentAuthStatus = authStatus;
   const {
     data: tencentStatusCount,
@@ -310,8 +141,6 @@ function HomePage() {
     },
   });
 
-
-
   return (
     <div className="p-4 space-y-3 max-w-7xl mx-auto">
       {/* 页面标题 */}
@@ -334,7 +163,7 @@ function HomePage() {
         </Button>
       </div>
 
-      {/* 未登录警告 - 当任一平台未登录时显示 */}
+      {/* 未登录警告 */}
       {!authLoading && (!tencentAuthStatus?.isLoggedIn || !juejinAuthStatus?.isLoggedIn) && (
         <Card className="py-0 gap-0 border-yellow-200 bg-yellow-50 dark:border-yellow-900 dark:bg-yellow-950">
           <CardContent className="flex items-center gap-3 py-2.5 px-4">
@@ -355,7 +184,7 @@ function HomePage() {
         </Card>
       )}
 
-      {/* 统计卡片 - 每个卡片独立加载 */}
+      {/* 统计卡片 */}
       <div className="grid gap-3 grid-cols-2 lg:grid-cols-4">
         <Card className="py-0 gap-0 group hover:border-blue-200 dark:hover:border-blue-800 transition-colors">
           <CardContent className="p-3">
@@ -605,7 +434,6 @@ function HomePage() {
                 size="sm"
                 className="w-full h-11 flex flex-col gap-0.5 p-1 hover:bg-primary/5 hover:border-primary/30 transition-colors"
                 onClick={() => {
-                  // 同时触发两个平台的同步
                   if (tencentAuthStatus?.isLoggedIn) tencentSyncMutation.mutate();
                   if (juejinAuthStatus?.isLoggedIn) juejinSyncMutation.mutate();
                 }}
@@ -679,7 +507,7 @@ function HomePage() {
           <CardHeader className="py-3 px-4 pb-2">
             <div className="flex items-center justify-between">
               <CardTitle className="text-sm font-medium">定时发布</CardTitle>
-<Link to="/settings" search={{ tab: "schedule" }}>
+              <Link to="/settings" search={{ tab: "schedule" }}>
                 <Button variant="ghost" size="sm" className="h-6 text-xs px-2">
                   管理
                   <ArrowRight className="h-3 w-3 ml-0.5" />

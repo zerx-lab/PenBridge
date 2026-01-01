@@ -176,6 +176,11 @@ jobs:
         with:
           node-version: 20
 
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
       - name: Download web build
         uses: actions/download-artifact@v4
         with:
@@ -194,6 +199,21 @@ jobs:
             exit 1
           fi
           echo "OK: Web build verified"
+
+      - name: Install server dependencies
+        run: bun install
+        working-directory: packages/server
+
+      - name: Build server for macOS (x64)
+        run: |
+          mkdir -p electron/server/prompts
+          # 构建 x64 版本
+          bun build src/index.ts --compile --outfile ../electron/server/pen-bridge-server-x64 --target bun-darwin-x64
+          # 构建 ARM64 版本
+          bun build src/index.ts --compile --outfile ../electron/server/pen-bridge-server-arm64 --target bun-darwin-arm64
+          # 复制 prompts 目录
+          cp -r src/prompts ../electron/server/prompts
+        working-directory: packages/server
 
       - name: Update Electron package version
         run: |
@@ -251,6 +271,11 @@ jobs:
         with:
           node-version: 20
 
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
       - name: Download web build
         uses: actions/download-artifact@v4
         with:
@@ -271,6 +296,22 @@ jobs:
             exit 1
           }
           Write-Host "OK: Web build verified"
+
+      - name: Install server dependencies
+        run: bun install
+        working-directory: packages/server
+
+      - name: Build server for Windows
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path "../electron/server/prompts"
+          # 构建 x64 版本
+          bun build src/index.ts --compile --outfile ../electron/server/pen-bridge-server-x64.exe --target bun-windows-x64
+          # 构建 ARM64 版本
+          bun build src/index.ts --compile --outfile ../electron/server/pen-bridge-server-arm64.exe --target bun-windows-arm64
+          # 复制 prompts 目录
+          Copy-Item -Path "src/prompts/*" -Destination "../electron/server/prompts" -Recurse
+        working-directory: packages/server
 
       - name: Update Electron package version
         shell: pwsh
@@ -333,6 +374,11 @@ jobs:
         with:
           node-version: 20
 
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
       - name: Download web build
         uses: actions/download-artifact@v4
         with:
@@ -351,6 +397,21 @@ jobs:
             exit 1
           fi
           echo "OK: Web build verified"
+
+      - name: Install server dependencies
+        run: bun install
+        working-directory: packages/server
+
+      - name: Build server for Linux
+        run: |
+          mkdir -p ../electron/server/prompts
+          # 构建 x64 版本
+          bun build src/index.ts --compile --outfile ../electron/server/pen-bridge-server-x64 --target bun-linux-x64
+          # 构建 ARM64 版本
+          bun build src/index.ts --compile --outfile ../electron/server/pen-bridge-server-arm64 --target bun-linux-arm64
+          # 复制 prompts 目录
+          cp -r src/prompts ../electron/server/prompts
+        working-directory: packages/server
 
       - name: Update Electron package version
         run: |
