@@ -2535,6 +2535,12 @@ function AIConfigSettings() {
       message.error("请输入显示名称");
       return;
     }
+    // 验证工具最大调用次数
+    const maxLoopCount = modelForm.capabilities.aiLoop.maxLoopCount;
+    if (maxLoopCount < 1 || maxLoopCount > 100) {
+      message.error("工具最大调用次数必须在 1-100 之间");
+      return;
+    }
 
     if (editingModel) {
       updateModelMutation.mutate({
@@ -3254,13 +3260,18 @@ function AIConfigSettings() {
                           min="1"
                           max="100"
                           value={modelForm.capabilities.aiLoop.maxLoopCount}
-                          onChange={(e) => setModelForm({
-                            ...modelForm,
-                            capabilities: {
-                              ...modelForm.capabilities,
-                              aiLoop: { maxLoopCount: parseInt(e.target.value) || 20 },
-                            },
-                          })}
+                          onChange={(e) => {
+                            const value = parseInt(e.target.value);
+                            // 允许输入但限制范围，空值默认为 20
+                            const clampedValue = isNaN(value) ? 20 : Math.min(100, Math.max(1, value));
+                            setModelForm({
+                              ...modelForm,
+                              capabilities: {
+                                ...modelForm.capabilities,
+                                aiLoop: { maxLoopCount: clampedValue },
+                              },
+                            });
+                          }}
                           className="w-24"
                         />
                         <span className="text-xs text-muted-foreground">
@@ -4296,7 +4307,8 @@ interface UpdateStatusType {
 
 // 关于组件
 function AboutSettings() {
-  const [currentVersion, setCurrentVersion] = useState<string>("1.0.0");
+  // 使用构建时注入的版本号作为默认值，Electron 环境会用 app.getVersion() 覆盖
+  const [currentVersion, setCurrentVersion] = useState<string>(__APP_VERSION__);
   const [updateStatus, setUpdateStatus] = useState<UpdateStatusType | null>(null);
   const [isCheckingUpdate, setIsCheckingUpdate] = useState(false);
 
@@ -4304,7 +4316,7 @@ function AboutSettings() {
   useEffect(() => {
     if (!isElectron()) return;
 
-    // 获取当前版本
+    // Electron 环境：获取 app.getVersion() 的版本号（与构建时的版本号应该一致）
     window.electronAPI!.updater.getVersion().then(setCurrentVersion);
 
     // 获取当前更新状态

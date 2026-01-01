@@ -3,12 +3,17 @@ import react from "@vitejs/plugin-react";
 import { tanstackRouter } from "@tanstack/router-plugin/vite";
 import tailwindcss from "@tailwindcss/vite";
 import path from "path";
+import fs from "fs";
 import { viteStaticCopy } from "vite-plugin-static-copy";
 
 // 根据构建目标设置 base 路径
 // - Electron 打包：使用相对路径 "./"（file:// 协议）
 // - Docker/Web 部署：使用绝对路径 "/"（HTTP 协议）
 const isElectron = process.env.BUILD_TARGET === "electron";
+
+// 从 package.json 读取版本号
+const packageJson = JSON.parse(fs.readFileSync("./package.json", "utf-8"));
+const appVersion = packageJson.version || "1.0.0";
 
 export default defineConfig({
   plugins: [
@@ -46,6 +51,10 @@ export default defineConfig({
   },
   server: {
     port: 5173,
+  },
+  // 定义全局常量，在构建时注入版本号
+  define: {
+    __APP_VERSION__: JSON.stringify(appVersion),
   },
   build: {
     // 代码分割优化

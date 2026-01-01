@@ -118,6 +118,9 @@ declare global {
   interface Window {
     electronAPI?: ElectronAPI;
   }
+  
+  // Vite 构建时注入的版本号常量
+  const __APP_VERSION__: string;
 }
 
 export {};

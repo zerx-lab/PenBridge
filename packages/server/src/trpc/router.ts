@@ -1824,8 +1824,8 @@ export const appRouter = t.router({
           modelId: z.string().min(1, "请输入模型标识"),
           displayName: z.string().min(1, "请输入显示名称"),
           isDefault: z.boolean().optional(),
-          // 上下文最大长度（tokens）
-          contextLength: z.number().min(1).optional(),
+          // 上下文最大长度（tokens）- 允许 null 或 undefined，转换为 undefined
+          contextLength: z.number().min(1).nullish().transform(val => val ?? undefined),
           parameters: z.object({
             temperature: z.number().min(0).max(2).optional(),
             maxTokens: z.number().min(1).optional(),
@@ -1857,7 +1857,7 @@ export const appRouter = t.router({
             }).optional(),
             // AI Loop 配置
             aiLoop: z.object({
-              maxLoopCount: z.number().min(1).max(100),
+              maxLoopCount: z.number().min(1).max(100).nullish().transform(val => val ?? 20),
             }).optional(),
           }).optional(),
         })
@@ -1902,8 +1902,8 @@ export const appRouter = t.router({
           displayName: z.string().min(1).optional(),
           isDefault: z.boolean().optional(),
           enabled: z.boolean().optional(),
-          // 上下文最大长度（tokens）
-          contextLength: z.number().min(1).optional(),
+          // 上下文最大长度（tokens）- 允许 null 或 undefined，转换为 undefined
+          contextLength: z.number().min(1).nullish().transform(val => val ?? undefined),
           parameters: z.object({
             temperature: z.number().min(0).max(2).optional(),
             maxTokens: z.number().min(1).optional(),
@@ -1935,7 +1935,7 @@ export const appRouter = t.router({
             }).optional(),
             // AI Loop 配置
             aiLoop: z.object({
-              maxLoopCount: z.number().min(1).max(100),
+              maxLoopCount: z.number().min(1).max(100).nullish().transform(val => val ?? 20),
             }).optional(),
           }).optional(),
         })
