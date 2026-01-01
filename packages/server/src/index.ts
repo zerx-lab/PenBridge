@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { streamSSE } from "hono/streaming";
 import { trpcServer } from "@hono/trpc-server";
-import { serveStatic } from "./services/staticServe";
+import { serveStatic } from "hono/bun";
 import { appRouter } from "./trpc/router";
 import { initDatabase, AppDataSource } from "./db";
 import { schedulerService } from "./services/scheduler";
