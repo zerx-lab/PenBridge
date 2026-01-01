@@ -82,57 +82,6 @@ jobs:
           path: packages/web/dist
           retention-days: 1
 
-  # 生成图标（macOS 需要 .icns，Linux 需要 .png）
-  build-icons:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Install image tools
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y imagemagick librsvg2-bin icnsutils
-
-      # 从 SVG 生成 PNG（多种尺寸）
-      - name: Generate PNG icons from SVG
-        working-directory: electron/assets
-        run: |
-          # 生成各种尺寸的 PNG
-          for size in 16 32 48 64 128 256 512 1024; do
-            rsvg-convert -w $size -h $size icon.svg -o icon_${size}.png
-          done
-          # 复制 256x256 作为默认 icon.png（Linux 使用）
-          cp icon_256.png icon.png
-
-      # 生成 macOS icns 文件
-      - name: Generate macOS icns
-        working-directory: electron/assets
-        run: |
-          mkdir -p icon.iconset
-          cp icon_16.png icon.iconset/icon_16x16.png
-          cp icon_32.png icon.iconset/icon_16x16@2x.png
-          cp icon_32.png icon.iconset/icon_32x32.png
-          cp icon_64.png icon.iconset/icon_32x32@2x.png
-          cp icon_128.png icon.iconset/icon_128x128.png
-          cp icon_256.png icon.iconset/icon_128x128@2x.png
-          cp icon_256.png icon.iconset/icon_256x256.png
-          cp icon_512.png icon.iconset/icon_256x256@2x.png
-          cp icon_512.png icon.iconset/icon_512x512.png
-          cp icon_1024.png icon.iconset/icon_512x512@2x.png
-          # 使用 png2icns 生成 icns（icnsutils 提供）
-          png2icns icon.icns icon_16.png icon_32.png icon_48.png icon_128.png icon_256.png icon_512.png
-          rm -rf icon.iconset icon_*.png
-
-      - name: Upload icons artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: icons
-          path: |
-            electron/assets/icon.png
-            electron/assets/icon.icns
-          retention-days: 1
-
   # 构建 Docker 镜像（包含前端和后端）
   build-docker:
     needs: prepare
@@ -184,7 +133,7 @@ jobs:
 
   # macOS 构建
   build-macos:
-    needs: [prepare, build-web, build-icons]
+    needs: [prepare, build-web]
     runs-on: macos-latest
     steps:
       - name: Checkout
@@ -200,12 +149,6 @@ jobs:
         with:
           name: web-dist
           path: electron/web
-
-      - name: Download icons
-        uses: actions/download-artifact@v4
-        with:
-          name: icons
-          path: electron/assets
 
       - name: Update Electron package version
         run: |
@@ -292,7 +235,7 @@ jobs:
 
   # Linux 构建（使用 electron-builder）
   build-linux:
-    needs: [prepare, build-web, build-icons]
+    needs: [prepare, build-web]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -308,12 +251,6 @@ jobs:
         with:
           name: web-dist
           path: electron/web
-
-      - name: Download icons
-        uses: actions/download-artifact@v4
-        with:
-          name: icons
-          path: electron/assets
 
       - name: Update Electron package version
         run: |
