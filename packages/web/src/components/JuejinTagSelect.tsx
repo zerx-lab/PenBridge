@@ -1,7 +1,6 @@
 import { useState, useEffect, useRef } from "react";
-import { Select, Spin, Tag } from "antd";
 import { trpc } from "../utils/trpc";
-import type { DefaultOptionType } from "antd/es/select";
+import { MultiSelect, type MultiSelectOption } from "@/components/ui/multi-select";
 
 interface TagOption {
   tag_id: string;
@@ -19,6 +18,7 @@ interface JuejinTagSelectProps {
   placeholder?: string;
   disabled?: boolean;
   maxCount?: number;
+  // getPopupContainer 在新组件中不再需要，但保留接口兼容性
   getPopupContainer?: () => HTMLElement;
 }
 
@@ -32,7 +32,6 @@ export function JuejinTagSelect({
   placeholder = "搜索并选择标签（至少1个，最多3个）",
   disabled = false,
   maxCount = 3,
-  getPopupContainer,
 }: JuejinTagSelectProps) {
   const [searchValue, setSearchValue] = useState("");
   const [debouncedSearchValue, setDebouncedSearchValue] = useState("");
@@ -61,7 +60,6 @@ export function JuejinTagSelect({
   }, [searchValue]);
 
   // 搜索标签 - 只在有内容时才请求
-  // 使用 isFetching 而不是 isLoading，因为 isLoading 在 enabled=false 时初始状态也可能为 true
   const { data: searchResults, isFetching } = trpc.juejin.searchTags.useQuery(
     { keyword: debouncedSearchValue },
     {
@@ -70,77 +68,61 @@ export function JuejinTagSelect({
     }
   );
 
-  // 处理选择变化
-  const handleChange = (newLabelValues: LabelValue[]) => {
-    // 限制最多选择 maxCount 个
-    if (newLabelValues.length <= maxCount) {
-      onChange?.(newLabelValues);
-    }
+  // 处理搜索
+  const handleSearch = (keyword: string) => {
+    setSearchValue(keyword);
   };
 
-  // 处理搜索
-  const handleSearch = (val: string) => {
-    setSearchValue(val);
+  // 处理选择变化
+  const handleChange = (newValues: MultiSelectOption[]) => {
+    // 转换为 LabelValue 类型
+    const labelValues: LabelValue[] = newValues.map((v) => ({
+      value: v.value,
+      label: v.label,
+    }));
+    onChange?.(labelValues);
   };
 
   // 构建选项列表
-  const options: DefaultOptionType[] = (searchResults || []).map(
+  const options: MultiSelectOption[] = (searchResults || []).map(
     (tag: TagOption) => ({
       value: tag.tag_id,
       label: tag.tag_name,
     })
   );
 
+  // 转换 value 为 MultiSelectOption 类型
+  const selectedValues: MultiSelectOption[] = value.map((v) => ({
+    value: v.value,
+    label: v.label,
+  }));
+
   // 判断是否正在输入（防抖中）
   const isTyping = searchValue.trim() !== debouncedSearchValue;
 
-  // 计算 notFoundContent 显示内容
-  // 只有在真正发送请求时才显示 loading
-  const getNotFoundContent = () => {
-    if (isFetching) {
-      // 正在请求 API
-      return <Spin size="small" />;
-    }
+  // 计算提示消息
+  const getEmptyMessage = () => {
     if (isTyping && searchValue.trim()) {
-      // 正在输入（防抖中），显示提示而不是 loading
       return "正在输入...";
     }
     if (debouncedSearchValue) {
-      // 请求完成但没有结果
       return "未找到匹配的标签";
     }
-    // 未输入任何内容
     return "请输入关键词搜索标签";
   };
 
   return (
-    <Select
-      mode="multiple"
-      labelInValue
-      value={value}
-      placeholder={placeholder}
-      disabled={disabled}
-      filterOption={false}
-      onSearch={handleSearch}
+    <MultiSelect
+      value={selectedValues}
       onChange={handleChange}
-      notFoundContent={getNotFoundContent()}
       options={options}
-      style={{ width: "100%" }}
-      getPopupContainer={getPopupContainer}
-      maxTagCount={maxCount}
-      tagRender={(props) => {
-        const { label, closable, onClose } = props;
-        return (
-          <Tag
-            color="blue"
-            closable={closable}
-            onClose={onClose}
-            style={{ marginRight: 3 }}
-          >
-            {label}
-          </Tag>
-        );
-      }}
+      placeholder={placeholder}
+      searchPlaceholder="输入关键词搜索标签..."
+      disabled={disabled}
+      maxCount={maxCount}
+      onSearch={handleSearch}
+      loading={isFetching}
+      emptyMessage={getEmptyMessage()}
     />
   );
 }

@@ -1631,6 +1631,7 @@ a .text-foreground,
   transform: translateY(-50%);
   opacity: 0;
   transition: opacity 0.2s;
+  pointer-events: none; /* 确保不会阻止鼠标事件 */
 }
 
 .milkdown-editor .directive-left:hover::before,
@@ -1662,5 +1663,146 @@ a .text-foreground,
 .dark .milkdown-editor .directive-center,
 .dark .milkdown-editor .directive-justify {
   border-left-color: var(--border);
+}
+
+/* ========================================
+   图片布局工具栏样式
+   ======================================== */
+
+.image-layout-toolbar {
+  position: absolute;
+  z-index: 100;
+  display: flex;
+  gap: 2px;
+  padding: 4px;
+  background: var(--popover);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  animation: image-toolbar-fade-in 0.15s ease-out;
+}
+
+@keyframes image-toolbar-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.image-layout-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--foreground);
+  cursor: pointer;
+  transition: background-color 0.15s, color 0.15s;
+}
+
+.image-layout-btn:hover {
+  background: var(--accent);
+  color: var(--accent-foreground);
+}
+
+.image-layout-btn.active {
+  background: var(--primary);
+  color: var(--primary-foreground);
+}
+
+.image-layout-btn svg {
+  width: 16px;
+  height: 16px;
+}
+
+/* 暗色模式适配 */
+.dark .image-layout-toolbar {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+/* ========================================
+   覆盖 Crepe image-block 默认样式
+   使图片在对齐容器内响应 text-align
+   ======================================== */
+
+/* 重置 image-block 的默认居中样式 */
+.milkdown-editor milkdown-image-block,
+.milkdown-editor .image-block,
+.milkdown-editor [data-type="image-block"] {
+  display: inline-block !important;
+  text-align: left;
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+}
+
+/* 关键：覆盖 .image-wrapper 的默认 flex 居中样式 */
+.milkdown-editor milkdown-image-block > .image-wrapper,
+.milkdown-editor .image-block > .image-wrapper,
+.milkdown-editor [data-type="image-block"] > .image-wrapper,
+.milkdown-editor .milkdown-image-block > .image-wrapper {
+  margin: 0 !important;
+  justify-content: flex-start !important; /* 默认左对齐，不居中 */
+}
+
+/* 在对齐容器内，让 image-block 响应容器的 text-align */
+.directive-left milkdown-image-block,
+.directive-left .image-block,
+.directive-left [data-type="image-block"],
+.directive-left .milkdown-image-block {
+  display: inline-block !important;
+}
+
+.directive-left .image-wrapper {
+  justify-content: flex-start !important;
+}
+
+.directive-right milkdown-image-block,
+.directive-right .image-block,
+.directive-right [data-type="image-block"],
+.directive-right .milkdown-image-block {
+  display: inline-block !important;
+}
+
+.directive-right .image-wrapper {
+  justify-content: flex-end !important;
+}
+
+.directive-center milkdown-image-block,
+.directive-center .image-block,
+.directive-center [data-type="image-block"],
+.directive-center .milkdown-image-block {
+  display: inline-block !important;
+}
+
+.directive-center .image-wrapper {
+  justify-content: center !important;
+}
+
+.directive-justify milkdown-image-block,
+.directive-justify .image-block,
+.directive-justify [data-type="image-block"],
+.directive-justify .milkdown-image-block {
+  display: inline-block !important;
+}
+
+.directive-justify .image-wrapper {
+  justify-content: flex-start !important;
+}
+
+/* 确保图片本身不会被拉伸 */
+.directive-left img,
+.directive-right img,
+.directive-center img,
+.directive-justify img {
+  max-width: 100%;
+  height: auto;
 }
 

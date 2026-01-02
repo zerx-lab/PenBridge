@@ -1,16 +1,16 @@
 import { useState, useEffect, useRef } from "react";
-import { message, Select } from "antd";
+import { message } from "antd";
 import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+  LightDialog,
+  LightDialogHeader,
+  LightDialogTitle,
+  LightDialogDescription,
+  LightDialogFooter,
+} from "@/components/ui/light-dialog";
+import { NativeSelect } from "@/components/ui/native-select";
 import { trpc } from "@/utils/trpc";
 import TencentTagSelect from "./TencentTagSelect";
 
@@ -38,7 +38,7 @@ export function TencentPublishDialog({
   onSuccess,
 }: TencentPublishDialogProps) {
   const [tagIds, setTagIds] = useState<number[]>(initialTagIds);
-  const [sourceType, setSourceType] = useState<number>(initialSourceType);
+  const [sourceType, setSourceType] = useState<string>(String(initialSourceType));
   const [summary, setSummary] = useState(initialSummary);
 
   const trpcUtils = trpc.useContext();
@@ -47,7 +47,7 @@ export function TencentPublishDialog({
   useEffect(() => {
     if (open) {
       setTagIds(initialTagIds);
-      setSourceType(initialSourceType);
+      setSourceType(String(initialSourceType));
       setSummary(initialSummary);
     }
   }, [open, initialTagIds, initialSourceType, initialSummary]);
@@ -112,7 +112,7 @@ export function TencentPublishDialog({
     try {
       // 先保存标签和来源类型
       await setTagsMutation.mutateAsync({ id: articleId, tagIds });
-      await setSourceTypeMutation.mutateAsync({ id: articleId, sourceType });
+      await setSourceTypeMutation.mutateAsync({ id: articleId, sourceType: Number(sourceType) });
 
       // 如果有摘要变更，保存摘要
       if (summary !== initialSummary) {
@@ -140,14 +140,14 @@ export function TencentPublishDialog({
   const containerRef = useRef<HTMLDivElement>(null);
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[480px]" ref={containerRef}>
-        <DialogHeader>
-          <DialogTitle>发布到腾讯云开发者社区</DialogTitle>
-          <DialogDescription>
+    <LightDialog open={open} onOpenChange={onOpenChange} className="sm:max-w-[480px]">
+      <div ref={containerRef}>
+        <LightDialogHeader>
+          <LightDialogTitle>发布到腾讯云开发者社区</LightDialogTitle>
+          <LightDialogDescription>
             配置发布选项，文章将提交至平台审核
-          </DialogDescription>
-        </DialogHeader>
+          </LightDialogDescription>
+        </LightDialogHeader>
 
         <div className="space-y-4 py-4">
           {/* 标签选择 */}
@@ -165,19 +165,18 @@ export function TencentPublishDialog({
             </p>
           </div>
 
-          {/* 来源类型 */}
+          {/* 来源类型 - 使用轻量级 Select 提升性能 */}
           <div className="space-y-2">
             <Label>文章来源</Label>
-            <Select
+            <NativeSelect
               value={sourceType}
               onChange={setSourceType}
+              placeholder="选择来源类型"
               options={[
-                { value: 1, label: "原创" },
-                { value: 2, label: "转载" },
-                { value: 3, label: "翻译" },
+                { value: "1", label: "原创" },
+                { value: "2", label: "转载" },
+                { value: "3", label: "翻译" },
               ]}
-              className="w-full"
-              getPopupContainer={() => containerRef.current || document.body}
             />
           </div>
 
@@ -194,7 +193,7 @@ export function TencentPublishDialog({
           </div>
         </div>
 
-        <DialogFooter>
+        <LightDialogFooter>
           <Button
             variant="outline"
             onClick={() => onOpenChange(false)}
@@ -206,9 +205,9 @@ export function TencentPublishDialog({
             {isLoading && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
             确认发布
           </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+        </LightDialogFooter>
+      </div>
+    </LightDialog>
   );
 }
 

@@ -6,10 +6,15 @@ import {
   ChevronDown,
   ExternalLink,
   Clock,
-  CalendarClock,
+  Calendar,
   Edit,
   Flame,
 } from "lucide-react";
+import { trpc } from "@/utils/trpc";
+import TencentPublishDialog from "./TencentPublishDialog";
+import SchedulePublishDialog from "./SchedulePublishDialog";
+import JuejinPublishDialog from "./JuejinPublishDialog";
+import JuejinSchedulePublishDialog from "./JuejinSchedulePublishDialog";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -26,11 +31,6 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { trpc } from "@/utils/trpc";
-import TencentPublishDialog from "./TencentPublishDialog";
-import SchedulePublishDialog from "./SchedulePublishDialog";
-import JuejinPublishDialog from "./JuejinPublishDialog";
-import JuejinSchedulePublishDialog from "./JuejinSchedulePublishDialog";
 
 interface PublishMenuProps {
   articleId: number;
@@ -136,6 +136,16 @@ export function PublishMenu({
     }
   };
 
+  const handleViewJuejinArticle = () => {
+    if (juejinArticleUrl) {
+      if (window.electronAPI?.shell?.openExternal) {
+        window.electronAPI.shell.openExternal(juejinArticleUrl);
+      } else {
+        window.open(juejinArticleUrl, "_blank");
+      }
+    }
+  };
+
   // 判断文章状态
   const isPublished = articleStatus === "published";
   const isPending = articleStatus === "pending";
@@ -143,6 +153,9 @@ export function PublishMenu({
   const canPublish =
     articleStatus === "draft" ||
     articleStatus === "failed";
+
+  // 掘金状态判断
+  const canPublishJuejin = !juejinStatus || juejinStatus === "draft" || juejinStatus === "failed";
 
   // 格式化定时发布时间
   const formatScheduledTime = (time: string) => {
@@ -154,15 +167,14 @@ export function PublishMenu({
   const TriggerButton = (
     <Button
       variant={variant === "icon" ? "ghost" : "default"}
-      size={variant === "icon" ? "icon" : "sm"}
-      className={variant === "icon" ? "h-8 w-8" : "gap-1.5"}
+      size={variant === "icon" ? "icon-sm" : "default"}
       disabled={disabled}
     >
-      <CloudUpload className="h-4 w-4" />
+      <CloudUpload className="size-4" />
       {variant !== "icon" && (
         <>
           发布
-          <ChevronDown className="h-3 w-3" />
+          <ChevronDown className="size-3" />
         </>
       )}
     </Button>
@@ -170,47 +182,45 @@ export function PublishMenu({
 
   return (
     <>
-      <DropdownMenu>
-        {variant === "icon" ? (
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <DropdownMenuTrigger asChild>
+      {/* modal={false} 是关键优化：防止 DropdownMenu 阻塞主线程，允许与 Dialog 更好地交互 */}
+      <DropdownMenu modal={false}>
+        <DropdownMenuTrigger asChild disabled={disabled}>
+          {variant === "icon" ? (
+            <Tooltip>
+              <TooltipTrigger asChild>
                 {TriggerButton}
-              </DropdownMenuTrigger>
-            </TooltipTrigger>
-            <TooltipContent>发布文章</TooltipContent>
-          </Tooltip>
-        ) : (
-          <DropdownMenuTrigger asChild>{TriggerButton}</DropdownMenuTrigger>
-        )}
-        <DropdownMenuContent align="end" className="w-48">
-          {/* 腾讯云开发者社区 */}
+              </TooltipTrigger>
+              <TooltipContent>发布文章</TooltipContent>
+            </Tooltip>
+          ) : (
+            TriggerButton
+          )}
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end">
+          {/* 腾讯云开发者社区子菜单 */}
           <DropdownMenuSub>
             <DropdownMenuSubTrigger>
-              <span className="flex items-center gap-2">
-                <Cloud className="h-4 w-4" />
-                腾讯云开发者社区
-              </span>
+              <Cloud className="size-4" />
+              腾讯云开发者社区
             </DropdownMenuSubTrigger>
-            <DropdownMenuSubContent className="w-40">
+            <DropdownMenuSubContent>
               {canPublish && (
-                <DropdownMenuItem onClick={() => setPublishDialogOpen(true)}>
-                  <CloudUpload className="h-4 w-4 mr-2" />
-                  立即发布
-                </DropdownMenuItem>
-              )}
-
-              {canPublish && (
-                <DropdownMenuItem onClick={() => setScheduleDialogOpen(true)}>
-                  <CalendarClock className="h-4 w-4 mr-2" />
-                  定时发布
-                </DropdownMenuItem>
+                <>
+                  <DropdownMenuItem onClick={() => setPublishDialogOpen(true)}>
+                    <CloudUpload className="size-4" />
+                    立即发布
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setScheduleDialogOpen(true)}>
+                    <Calendar className="size-4" />
+                    定时发布
+                  </DropdownMenuItem>
+                </>
               )}
 
               {isScheduled && (
                 <DropdownMenuItem onClick={() => setScheduleDialogOpen(true)}>
-                  <Edit className="h-4 w-4 mr-2" />
-                  编辑定时 {scheduledAt && `(${formatScheduledTime(scheduledAt)})`}
+                  <Edit className="size-4" />
+                  编辑定时 {scheduledAt ? `(${formatScheduledTime(scheduledAt)})` : ""}
                 </DropdownMenuItem>
               )}
 
@@ -219,21 +229,21 @@ export function PublishMenu({
                   onClick={handleSyncDraft}
                   disabled={saveDraftMutation.isLoading}
                 >
-                  <Cloud className="h-4 w-4 mr-2" />
+                  <Cloud className="size-4" />
                   同步草稿
                 </DropdownMenuItem>
               )}
 
               {isPending && (
                 <DropdownMenuItem disabled>
-                  <Clock className="h-4 w-4 mr-2" />
+                  <Clock className="size-4" />
                   审核中...
                 </DropdownMenuItem>
               )}
 
               {(isPublished || isPending) && tencentArticleUrl && (
                 <DropdownMenuItem onClick={handleViewArticle}>
-                  <ExternalLink className="h-4 w-4 mr-2" />
+                  <ExternalLink className="size-4" />
                   查看文章
                 </DropdownMenuItem>
               )}
@@ -248,24 +258,21 @@ export function PublishMenu({
 
           <DropdownMenuSeparator />
 
-          {/* 掘金 */}
+          {/* 掘金子菜单 */}
           <DropdownMenuSub>
             <DropdownMenuSubTrigger>
-              <span className="flex items-center gap-2">
-                <Flame className="h-4 w-4" />
-                掘金
-              </span>
+              <Flame className="size-4" />
+              掘金
             </DropdownMenuSubTrigger>
-            <DropdownMenuSubContent className="w-40">
-              {/* 可以发布到掘金（无论腾讯云状态如何，掘金独立判断） */}
-              {(!juejinStatus || juejinStatus === "draft" || juejinStatus === "failed") && (
+            <DropdownMenuSubContent>
+              {canPublishJuejin && (
                 <>
                   <DropdownMenuItem onClick={() => setJuejinPublishDialogOpen(true)}>
-                    <CloudUpload className="h-4 w-4 mr-2" />
+                    <CloudUpload className="size-4" />
                     立即发布
                   </DropdownMenuItem>
                   <DropdownMenuItem onClick={() => setJuejinScheduleDialogOpen(true)}>
-                    <CalendarClock className="h-4 w-4 mr-2" />
+                    <Calendar className="size-4" />
                     定时发布
                   </DropdownMenuItem>
                 </>
@@ -273,27 +280,21 @@ export function PublishMenu({
 
               {juejinStatus === "scheduled" && (
                 <DropdownMenuItem onClick={() => setJuejinScheduleDialogOpen(true)}>
-                  <Edit className="h-4 w-4 mr-2" />
-                  编辑定时 {juejinScheduledAt && `(${formatScheduledTime(juejinScheduledAt)})`}
+                  <Edit className="size-4" />
+                  编辑定时 {juejinScheduledAt ? `(${formatScheduledTime(juejinScheduledAt)})` : ""}
                 </DropdownMenuItem>
               )}
 
               {juejinStatus === "pending" && (
                 <DropdownMenuItem disabled>
-                  <Clock className="h-4 w-4 mr-2" />
+                  <Clock className="size-4" />
                   审核中...
                 </DropdownMenuItem>
               )}
 
               {juejinStatus === "published" && juejinArticleUrl && (
-                <DropdownMenuItem onClick={() => {
-                  if (window.electronAPI?.shell?.openExternal) {
-                    window.electronAPI.shell.openExternal(juejinArticleUrl);
-                  } else {
-                    window.open(juejinArticleUrl, "_blank");
-                  }
-                }}>
-                  <ExternalLink className="h-4 w-4 mr-2" />
+                <DropdownMenuItem onClick={handleViewJuejinArticle}>
+                  <ExternalLink className="size-4" />
                   查看文章
                 </DropdownMenuItem>
               )}
@@ -308,70 +309,78 @@ export function PublishMenu({
 
           <DropdownMenuSeparator />
 
-          {/* 其他平台 - 敬请期待 */}
-          <DropdownMenuItem disabled className="text-muted-foreground">
+          {/* CSDN（敬请期待） */}
+          <DropdownMenuItem disabled>
             CSDN（敬请期待）
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
 
-      {/* 腾讯云开发者社区发布配置弹窗 */}
-      <TencentPublishDialog
-        open={publishDialogOpen}
-        onOpenChange={setPublishDialogOpen}
-        articleId={articleId}
-        tencentTagIds={tencentTagIds}
-        sourceType={sourceType}
-        summary={summary}
-        onSuccess={onSuccess}
-      />
+      {/* 腾讯云开发者社区发布配置弹窗 - 条件渲染，只在打开时才加载 */}
+      {publishDialogOpen && (
+        <TencentPublishDialog
+          open={publishDialogOpen}
+          onOpenChange={setPublishDialogOpen}
+          articleId={articleId}
+          tencentTagIds={tencentTagIds}
+          sourceType={sourceType}
+          summary={summary}
+          onSuccess={onSuccess}
+        />
+      )}
 
-      {/* 定时发布配置弹窗 */}
-      <SchedulePublishDialog
-        open={scheduleDialogOpen}
-        onOpenChange={setScheduleDialogOpen}
-        articleId={articleId}
-        tencentTagIds={tencentTagIds}
-        sourceType={sourceType}
-        summary={summary}
-        existingTask={existingTask ? {
-          id: existingTask.id,
-          scheduledAt: existingTask.scheduledAt as unknown as string,
-          config: existingTask.config as any,
-        } : null}
-        onSuccess={onSuccess}
-      />
+      {/* 定时发布配置弹窗 - 条件渲染 */}
+      {scheduleDialogOpen && (
+        <SchedulePublishDialog
+          open={scheduleDialogOpen}
+          onOpenChange={setScheduleDialogOpen}
+          articleId={articleId}
+          tencentTagIds={tencentTagIds}
+          sourceType={sourceType}
+          summary={summary}
+          existingTask={existingTask ? {
+            id: existingTask.id,
+            scheduledAt: existingTask.scheduledAt as unknown as string,
+            config: existingTask.config as any,
+          } : null}
+          onSuccess={onSuccess}
+        />
+      )}
 
-      {/* 掘金发布配置弹窗 */}
-      <JuejinPublishDialog
-        open={juejinPublishDialogOpen}
-        onOpenChange={setJuejinPublishDialogOpen}
-        articleId={articleId}
-        juejinCategoryId={juejinCategoryId}
-        juejinTagIds={juejinTagIds}
-        juejinTagNames={juejinTagNames}
-        juejinBriefContent={juejinBriefContent}
-        juejinIsOriginal={juejinIsOriginal}
-        onSuccess={onSuccess}
-      />
+      {/* 掘金发布配置弹窗 - 条件渲染 */}
+      {juejinPublishDialogOpen && (
+        <JuejinPublishDialog
+          open={juejinPublishDialogOpen}
+          onOpenChange={setJuejinPublishDialogOpen}
+          articleId={articleId}
+          juejinCategoryId={juejinCategoryId}
+          juejinTagIds={juejinTagIds}
+          juejinTagNames={juejinTagNames}
+          juejinBriefContent={juejinBriefContent}
+          juejinIsOriginal={juejinIsOriginal}
+          onSuccess={onSuccess}
+        />
+      )}
 
-      {/* 掘金定时发布配置弹窗 */}
-      <JuejinSchedulePublishDialog
-        open={juejinScheduleDialogOpen}
-        onOpenChange={setJuejinScheduleDialogOpen}
-        articleId={articleId}
-        juejinCategoryId={juejinCategoryId}
-        juejinTagIds={juejinTagIds}
-        juejinTagNames={juejinTagNames}
-        juejinBriefContent={juejinBriefContent}
-        juejinIsOriginal={juejinIsOriginal}
-        existingTask={existingJuejinTask ? {
-          id: existingJuejinTask.id,
-          scheduledAt: existingJuejinTask.scheduledAt as unknown as string,
-          config: existingJuejinTask.config as any,
-        } : null}
-        onSuccess={onSuccess}
-      />
+      {/* 掘金定时发布配置弹窗 - 条件渲染 */}
+      {juejinScheduleDialogOpen && (
+        <JuejinSchedulePublishDialog
+          open={juejinScheduleDialogOpen}
+          onOpenChange={setJuejinScheduleDialogOpen}
+          articleId={articleId}
+          juejinCategoryId={juejinCategoryId}
+          juejinTagIds={juejinTagIds}
+          juejinTagNames={juejinTagNames}
+          juejinBriefContent={juejinBriefContent}
+          juejinIsOriginal={juejinIsOriginal}
+          existingTask={existingJuejinTask ? {
+            id: existingJuejinTask.id,
+            scheduledAt: existingJuejinTask.scheduledAt as unknown as string,
+            config: existingJuejinTask.config as any,
+          } : null}
+          onSuccess={onSuccess}
+        />
+      )}
     </>
   );
 }

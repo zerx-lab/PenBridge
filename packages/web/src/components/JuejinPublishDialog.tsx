@@ -1,16 +1,16 @@
-import { useState, useEffect, useRef } from "react";
-import { message, Select } from "antd";
-import { Loader2 } from "lucide-react";
+import { useState, useEffect } from "react";
+import { message } from "antd";
+import { Loader2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+  LightDialog,
+  LightDialogHeader,
+  LightDialogTitle,
+  LightDialogDescription,
+  LightDialogFooter,
+} from "@/components/ui/light-dialog";
+import { NativeSelect } from "@/components/ui/native-select";
 import { trpc } from "@/utils/trpc";
 import JuejinTagSelect from "./JuejinTagSelect";
 
@@ -46,6 +46,7 @@ interface JuejinPublishDialogProps {
 
 /**
  * 掘金发布配置弹窗
+ * 使用轻量级 LightDialog 替代 Radix Dialog，提升性能
  */
 export function JuejinPublishDialog({
   open,
@@ -61,7 +62,7 @@ export function JuejinPublishDialog({
   const [categoryId, setCategoryId] = useState<string>(initialCategoryId);
   const [tags, setTags] = useState<TagLabelValue[]>([]);
   const [briefContent, setBriefContent] = useState(initialBriefContent);
-  const [isOriginal, setIsOriginal] = useState<number>(initialIsOriginal);
+  const [isOriginal, setIsOriginal] = useState<string>(String(initialIsOriginal));
 
   const trpcUtils = trpc.useContext();
 
@@ -78,7 +79,7 @@ export function JuejinPublishDialog({
       }));
       setTags(initialTags);
       setBriefContent(initialBriefContent);
-      setIsOriginal(initialIsOriginal);
+      setIsOriginal(String(initialIsOriginal));
     }
   }, [open, initialCategoryId, initialTagIds, initialTagNames, initialBriefContent, initialIsOriginal]);
 
@@ -160,7 +161,7 @@ export function JuejinPublishDialog({
         tagIds: tags.map(t => t.value),
         tagNames: tags.map(t => t.label),
         briefContent,
-        isOriginal,
+        isOriginal: Number(isOriginal),
       });
 
       // 发布
@@ -173,9 +174,6 @@ export function JuejinPublishDialog({
 
   const isLoading = saveConfigMutation.isLoading || publishMutation.isLoading;
 
-  // 用于 antd Select 的容器引用
-  const containerRef = useRef<HTMLDivElement>(null);
-
   // 摘要字数统计
   const briefContentLength = briefContent.length;
   const isUnderLimit = briefContentLength > 0 && briefContentLength < 50;
@@ -183,105 +181,108 @@ export function JuejinPublishDialog({
   const isInvalidLength = isUnderLimit || isOverLimit;
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[520px]" ref={containerRef}>
-        <DialogHeader>
-          <DialogTitle>发布到掘金</DialogTitle>
-          <DialogDescription>
-            配置发布选项，文章将发布至掘金平台
-          </DialogDescription>
-        </DialogHeader>
+    <LightDialog open={open} onOpenChange={onOpenChange} className="sm:max-w-[520px]">
+      {/* 关闭按钮 */}
+      <button
+        type="button"
+        onClick={() => onOpenChange(false)}
+        className="absolute top-4 right-4 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+      >
+        <X className="size-4" />
+        <span className="sr-only">关闭</span>
+      </button>
 
-        <div className="space-y-4 py-4">
-          {/* 分类选择 */}
-          <div className="space-y-2">
-            <Label>
-              文章分类 <span className="text-destructive">*</span>
-            </Label>
-            <Select
-              value={categoryId || undefined}
-              onChange={setCategoryId}
-              placeholder="请选择文章分类"
-              options={JUEJIN_CATEGORIES.map(c => ({
-                value: c.category_id,
-                label: c.category_name,
-              }))}
-              className="w-full"
-              getPopupContainer={() => containerRef.current || document.body}
-            />
-            <p className="text-xs text-muted-foreground">
-              必须选择一个分类
-            </p>
-          </div>
+      <LightDialogHeader>
+        <LightDialogTitle>发布到掘金</LightDialogTitle>
+        <LightDialogDescription>
+          配置发布选项，文章将发布至掘金平台
+        </LightDialogDescription>
+      </LightDialogHeader>
 
-          {/* 标签选择 */}
-          <div className="space-y-2">
-            <Label>
-              文章标签 <span className="text-destructive">*</span>
-            </Label>
-            <JuejinTagSelect
-              value={tags}
-              onChange={handleTagChange}
-              maxCount={3}
-              getPopupContainer={() => containerRef.current || document.body}
-            />
-            <p className="text-xs text-muted-foreground">
-              至少选择1个标签，最多3个
-            </p>
-          </div>
-
-          {/* 是否原创 */}
-          <div className="space-y-2">
-            <Label>文章类型</Label>
-            <Select
-              value={isOriginal}
-              onChange={setIsOriginal}
-              options={[
-                { value: 1, label: "原创" },
-                { value: 0, label: "转载" },
-              ]}
-              className="w-full"
-              getPopupContainer={() => containerRef.current || document.body}
-            />
-          </div>
-
-          {/* 摘要 */}
-          <div className="space-y-2">
-            <Label>
-              文章摘要 <span className="text-destructive">*</span>
-            </Label>
-            <textarea
-              placeholder="请输入文章摘要（必填，50-100字）"
-              rows={3}
-              value={briefContent}
-              onChange={(e) => setBriefContent(e.target.value)}
-              className={`flex w-full rounded-md border bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 resize-none ${
-                isInvalidLength ? "border-destructive" : "border-input"
-              }`}
-            />
-            <p className={`text-xs ${isInvalidLength ? "text-destructive" : "text-muted-foreground"}`}>
-              {briefContentLength}/100 字符（至少50字）
-              {isUnderLimit && " - 摘要过短"}
-              {isOverLimit && " - 摘要过长"}
-            </p>
-          </div>
+      <div className="space-y-4 py-4">
+        {/* 分类选择 */}
+        <div className="space-y-2">
+          <Label>
+            文章分类 <span className="text-destructive">*</span>
+          </Label>
+          <NativeSelect
+            value={categoryId}
+            onChange={setCategoryId}
+            placeholder="请选择文章分类"
+            options={JUEJIN_CATEGORIES.map(c => ({
+              value: c.category_id,
+              label: c.category_name,
+            }))}
+          />
+          <p className="text-xs text-muted-foreground">
+            必须选择一个分类
+          </p>
         </div>
 
-        <DialogFooter>
-          <Button
-            variant="outline"
-            onClick={() => onOpenChange(false)}
-            disabled={isLoading}
-          >
-            取消
-          </Button>
-          <Button onClick={handlePublish} disabled={isLoading}>
-            {isLoading && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-            确认发布
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+        {/* 标签选择 */}
+        <div className="space-y-2">
+          <Label>
+            文章标签 <span className="text-destructive">*</span>
+          </Label>
+          <JuejinTagSelect
+            value={tags}
+            onChange={handleTagChange}
+            maxCount={3}
+          />
+          <p className="text-xs text-muted-foreground">
+            至少选择1个标签，最多3个
+          </p>
+        </div>
+
+        {/* 是否原创 */}
+        <div className="space-y-2">
+          <Label>文章类型</Label>
+          <NativeSelect
+            value={isOriginal}
+            onChange={setIsOriginal}
+            options={[
+              { value: "1", label: "原创" },
+              { value: "0", label: "转载" },
+            ]}
+          />
+        </div>
+
+        {/* 摘要 */}
+        <div className="space-y-2">
+          <Label>
+            文章摘要 <span className="text-destructive">*</span>
+          </Label>
+          <textarea
+            placeholder="请输入文章摘要（必填，50-100字）"
+            rows={3}
+            value={briefContent}
+            onChange={(e) => setBriefContent(e.target.value)}
+            className={`flex w-full rounded-md border bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 resize-none ${
+              isInvalidLength ? "border-destructive" : "border-input"
+            }`}
+          />
+          <p className={`text-xs ${isInvalidLength ? "text-destructive" : "text-muted-foreground"}`}>
+            {briefContentLength}/100 字符（至少50字）
+            {isUnderLimit && " - 摘要过短"}
+            {isOverLimit && " - 摘要过长"}
+          </p>
+        </div>
+      </div>
+
+      <LightDialogFooter>
+        <Button
+          variant="outline"
+          onClick={() => onOpenChange(false)}
+          disabled={isLoading}
+        >
+          取消
+        </Button>
+        <Button onClick={handlePublish} disabled={isLoading}>
+          {isLoading && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+          确认发布
+        </Button>
+      </LightDialogFooter>
+    </LightDialog>
   );
 }
 

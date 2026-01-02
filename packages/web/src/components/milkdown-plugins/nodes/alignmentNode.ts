@@ -63,22 +63,16 @@ function createAlignmentNode(name: AlignmentType) {
         return node.type === "containerDirective" && node.name === name;
       },
       runner: (state: any, node: any, type: any) => {
-        state.openNode(type, {});
-        // 处理子节点
-        if (node.children && node.children.length > 0) {
-          state.next(node.children);
-        }
-        state.closeNode();
+        // 使用链式调用，与官方 blockquote 实现保持一致
+        state.openNode(type).next(node.children).closeNode();
       },
     },
     
     toMarkdown: {
       match: (node: any) => node.type.name === name,
       runner: (state: any, node: any) => {
-        state.openNode("containerDirective", undefined, { name });
-        // 处理子内容
-        state.next(node.content);
-        state.closeNode();
+        // 使用链式调用，与官方 blockquote 实现保持一致
+        state.openNode("containerDirective", undefined, { name }).next(node.content).closeNode();
       },
     },
   }));

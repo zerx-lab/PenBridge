@@ -1,16 +1,16 @@
 import { useState, useEffect, useRef } from "react";
-import { message, Select, DatePicker, TimePicker } from "antd";
+import { message, DatePicker, TimePicker } from "antd";
 import { Loader2, Calendar, Clock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+  LightDialog,
+  LightDialogHeader,
+  LightDialogTitle,
+  LightDialogDescription,
+  LightDialogFooter,
+} from "@/components/ui/light-dialog";
+import { NativeSelect } from "@/components/ui/native-select";
 import { trpc } from "@/utils/trpc";
 import JuejinTagSelect from "./JuejinTagSelect";
 import dayjs from "dayjs";
@@ -76,7 +76,7 @@ export function JuejinSchedulePublishDialog({
   const [categoryId, setCategoryId] = useState<string>(initialCategoryId);
   const [tags, setTags] = useState<TagLabelValue[]>([]);
   const [briefContent, setBriefContent] = useState(initialBriefContent);
-  const [isOriginal, setIsOriginal] = useState<number>(initialIsOriginal);
+  const [isOriginal, setIsOriginal] = useState<string>(String(initialIsOriginal));
   const [scheduledDate, setScheduledDate] = useState<dayjs.Dayjs | null>(null);
   const [scheduledTime, setScheduledTime] = useState<dayjs.Dayjs | null>(null);
 
@@ -96,7 +96,7 @@ export function JuejinSchedulePublishDialog({
         }));
         setTags(initialTags);
         setBriefContent(existingTask.config.briefContent || "");
-        setIsOriginal(existingTask.config.isOriginal);
+        setIsOriginal(String(existingTask.config.isOriginal));
         const taskTime = dayjs(existingTask.scheduledAt);
         setScheduledDate(taskTime);
         setScheduledTime(taskTime);
@@ -111,7 +111,7 @@ export function JuejinSchedulePublishDialog({
         }));
         setTags(initialTags);
         setBriefContent(initialBriefContent);
-        setIsOriginal(initialIsOriginal);
+        setIsOriginal(String(initialIsOriginal));
         // 默认设置为1小时后
         const defaultTime = dayjs().add(1, "hour");
         setScheduledDate(defaultTime);
@@ -229,7 +229,7 @@ export function JuejinSchedulePublishDialog({
       tagIds: tags.map(t => t.value),
       tagNames: tags.map(t => t.label),
       briefContent,
-      isOriginal: isOriginal as 0 | 1,
+      isOriginal: Number(isOriginal) as 0 | 1,
     };
 
     if (existingTask) {
@@ -277,16 +277,16 @@ export function JuejinSchedulePublishDialog({
   const isInvalidLength = isUnderLimit || isOverLimit;
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[520px]" ref={containerRef}>
-        <DialogHeader>
-          <DialogTitle>
+    <LightDialog open={open} onOpenChange={onOpenChange} className="sm:max-w-[520px]">
+      <div ref={containerRef}>
+        <LightDialogHeader>
+          <LightDialogTitle>
             {existingTask ? "编辑定时发布" : "定时发布到掘金"}
-          </DialogTitle>
-          <DialogDescription>
+          </LightDialogTitle>
+          <LightDialogDescription>
             设置发布时间和配置，系统将在指定时间自动发布文章到掘金
-          </DialogDescription>
-        </DialogHeader>
+          </LightDialogDescription>
+        </LightDialogHeader>
 
         <div className="space-y-4 py-4">
           {/* 发布时间 */}
@@ -318,21 +318,19 @@ export function JuejinSchedulePublishDialog({
             </p>
           </div>
 
-          {/* 分类选择 */}
+          {/* 分类选择 - 使用原生 Select 提升性能 */}
           <div className="space-y-2">
             <Label>
               文章分类 <span className="text-destructive">*</span>
             </Label>
-            <Select
-              value={categoryId || undefined}
+            <NativeSelect
+              value={categoryId}
               onChange={setCategoryId}
               placeholder="请选择文章分类"
               options={JUEJIN_CATEGORIES.map(c => ({
                 value: c.category_id,
                 label: c.category_name,
               }))}
-              className="w-full"
-              getPopupContainer={() => containerRef.current || document.body}
             />
           </div>
 
@@ -352,18 +350,16 @@ export function JuejinSchedulePublishDialog({
             </p>
           </div>
 
-          {/* 是否原创 */}
+          {/* 是否原创 - 使用原生 Select 提升性能 */}
           <div className="space-y-2">
             <Label>文章类型</Label>
-            <Select
+            <NativeSelect
               value={isOriginal}
               onChange={setIsOriginal}
               options={[
-                { value: 1, label: "原创" },
-                { value: 0, label: "转载" },
+                { value: "1", label: "原创" },
+                { value: "0", label: "转载" },
               ]}
-              className="w-full"
-              getPopupContainer={() => containerRef.current || document.body}
             />
           </div>
 
@@ -389,7 +385,7 @@ export function JuejinSchedulePublishDialog({
           </div>
         </div>
 
-        <DialogFooter className="flex-col sm:flex-row gap-2">
+        <LightDialogFooter className="flex-col sm:flex-row gap-2">
           {existingTask && (
             <Button
               variant="destructive"
@@ -417,9 +413,9 @@ export function JuejinSchedulePublishDialog({
             <Clock className="h-4 w-4 mr-2" />
             {existingTask ? "更新定时" : "确认定时"}
           </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+        </LightDialogFooter>
+      </div>
+    </LightDialog>
   );
 }
 

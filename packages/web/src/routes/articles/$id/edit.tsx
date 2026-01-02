@@ -57,15 +57,16 @@ function EditArticlePage() {
   useEffect(() => { contentRef.current = content; }, [content]);
   useEffect(() => { summaryRef.current = summary; }, [summary]);
 
-  // 第一步：快速加载文章元数据（不含 content，响应速度快）
+  // 并行加载文章元数据和内容（优化：不再串行等待）
+  // 元数据用于快速渲染页面框架，内容用于编辑器初始化
   const { data: articleMeta, isLoading } = trpc.article.getMeta.useQuery({
     id: Number(id),
   });
 
-  // 第二步：延迟加载文章内容（大字段，可能较慢）
+  // 内容与元数据并行加载，不再等待元数据完成
+  // 这样可以减少约 100-200ms 的加载时间
   const { data: articleContent, isLoading: isContentLoading } = trpc.article.getContent.useQuery(
-    { id: Number(id) },
-    { enabled: !!articleMeta } // 元数据加载完成后再加载内容
+    { id: Number(id) }
   );
 
   // 合并元数据和内容，兼容原有逻辑

@@ -26,14 +26,19 @@ import {
 const MilkdownEditorWrapper = lazy(() => import("./MilkdownEditorWrapper"));
 const CodeMirrorEditor = lazy(() => import("./CodeMirrorEditor"));
 
-// 编辑器加载中占位组件
+// 编辑器加载中占位组件 - 优化骨架屏显示
 function EditorLoading() {
   return (
-    <div className="flex items-center justify-center min-h-[300px] text-muted-foreground">
-      <div className="flex flex-col items-center gap-2">
-        <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-        <span className="text-sm">加载编辑器中...</span>
-      </div>
+    <div className="min-h-[400px] space-y-4 animate-pulse">
+      {/* 模拟编辑器内容的骨架屏 */}
+      <div className="h-6 bg-muted rounded w-3/4" />
+      <div className="h-4 bg-muted rounded w-full" />
+      <div className="h-4 bg-muted rounded w-5/6" />
+      <div className="h-4 bg-muted rounded w-4/5" />
+      <div className="h-20 bg-muted rounded w-full mt-4" />
+      <div className="h-4 bg-muted rounded w-2/3" />
+      <div className="h-4 bg-muted rounded w-3/4" />
+      <div className="h-4 bg-muted rounded w-1/2" />
     </div>
   );
 }
@@ -87,6 +92,29 @@ function EditorSwitcherInner(
     () => new Set([initialEditorType ?? getEditorPreference()])
   );
 
+  // 空闲时预加载另一个编辑器，提升切换体验
+  useEffect(() => {
+    const preloadOtherEditor = () => {
+      if (editorType === "milkdown") {
+        // 预加载 CodeMirror
+        import("./CodeMirrorEditor");
+      } else {
+        // 预加载 Milkdown
+        import("./MilkdownEditorWrapper");
+      }
+    };
+
+    // 使用 requestIdleCallback 在浏览器空闲时预加载
+    if (typeof requestIdleCallback !== "undefined") {
+      const idleId = requestIdleCallback(preloadOtherEditor, { timeout: 3000 });
+      return () => cancelIdleCallback(idleId);
+    } else {
+      // 降级方案：使用 setTimeout
+      const timerId = setTimeout(preloadOtherEditor, 2000);
+      return () => clearTimeout(timerId);
+    }
+  }, [editorType]);
+
   // 两个编辑器的 ref
   const milkdownRef = useRef<EditorRef>(null);
   const codemirrorRef = useRef<EditorRef>(null);
@@ -118,15 +146,26 @@ function EditorSwitcherInner(
       }
 
       // 同步内容到目标编辑器
-      // 使用 requestAnimationFrame 确保在 DOM 更新后执行
-      requestAnimationFrame(() => {
+      // Milkdown 编辑器是异步初始化的（RAF + crepe.create()），需要重试等待就绪
+      const syncContent = (retryCount = 0) => {
         const targetRef = type === "milkdown" ? milkdownRef : codemirrorRef;
         if (targetRef.current) {
           isSyncingRef.current = true;
-          targetRef.current.setContent(currentContent);
+          const success = targetRef.current.setContent(currentContent);
           isSyncingRef.current = false;
+          
+          // 如果设置失败且还有重试次数，继续重试
+          if (!success && retryCount < 10) {
+            setTimeout(() => syncContent(retryCount + 1), 100);
+          }
+        } else if (retryCount < 10) {
+          // 编辑器 ref 还未就绪，继续重试
+          setTimeout(() => syncContent(retryCount + 1), 100);
         }
-      });
+      };
+      
+      // 使用 requestAnimationFrame 确保在 DOM 更新后执行
+      requestAnimationFrame(() => syncContent(0));
 
       // 如果当前内容与 props.value 不同，触发 onChange 以同步状态
       if (currentContent !== editorProps.value) {

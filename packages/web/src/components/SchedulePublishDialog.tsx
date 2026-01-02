@@ -1,16 +1,16 @@
 import { useState, useEffect, useRef } from "react";
-import { message, Select, DatePicker, TimePicker } from "antd";
+import { message, DatePicker, TimePicker } from "antd";
 import { Loader2, Calendar, Clock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+  LightDialog,
+  LightDialogHeader,
+  LightDialogTitle,
+  LightDialogDescription,
+  LightDialogFooter,
+} from "@/components/ui/light-dialog";
+import { NativeSelect } from "@/components/ui/native-select";
 import { trpc } from "@/utils/trpc";
 import TencentTagSelect from "./TencentTagSelect";
 import dayjs from "dayjs";
@@ -51,7 +51,7 @@ export function SchedulePublishDialog({
   onSuccess,
 }: SchedulePublishDialogProps) {
   const [tagIds, setTagIds] = useState<number[]>(initialTagIds);
-  const [sourceType, setSourceType] = useState<number>(initialSourceType);
+  const [sourceType, setSourceType] = useState<string>(String(initialSourceType));
   const [summary, setSummary] = useState(initialSummary);
   const [scheduledDate, setScheduledDate] = useState<dayjs.Dayjs | null>(null);
   const [scheduledTime, setScheduledTime] = useState<dayjs.Dayjs | null>(null);
@@ -64,7 +64,7 @@ export function SchedulePublishDialog({
       if (existingTask) {
         // 编辑模式：使用已有任务的配置
         setTagIds(existingTask.config.tagIds || []);
-        setSourceType(existingTask.config.sourceType);
+        setSourceType(String(existingTask.config.sourceType));
         setSummary(existingTask.config.summary || "");
         const taskTime = dayjs(existingTask.scheduledAt);
         setScheduledDate(taskTime);
@@ -72,7 +72,7 @@ export function SchedulePublishDialog({
       } else {
         // 新建模式：使用文章的配置
         setTagIds(initialTagIds);
-        setSourceType(initialSourceType);
+        setSourceType(String(initialSourceType));
         setSummary(initialSummary);
         // 默认设置为1小时后
         const defaultTime = dayjs().add(1, "hour");
@@ -157,7 +157,7 @@ export function SchedulePublishDialog({
 
     const tencentConfig = {
       tagIds,
-      sourceType: sourceType as 1 | 2 | 3,
+      sourceType: Number(sourceType) as 1 | 2 | 3,
       summary: summary || undefined,
     };
 
@@ -200,16 +200,16 @@ export function SchedulePublishDialog({
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[480px]" ref={containerRef}>
-        <DialogHeader>
-          <DialogTitle>
+    <LightDialog open={open} onOpenChange={onOpenChange} className="sm:max-w-[480px]">
+      <div ref={containerRef}>
+        <LightDialogHeader>
+          <LightDialogTitle>
             {existingTask ? "编辑定时发布" : "定时发布到腾讯云开发者社区"}
-          </DialogTitle>
-          <DialogDescription>
+          </LightDialogTitle>
+          <LightDialogDescription>
             设置发布时间和配置，系统将在指定时间自动发布文章
-          </DialogDescription>
-        </DialogHeader>
+          </LightDialogDescription>
+        </LightDialogHeader>
 
         <div className="space-y-4 py-4">
           {/* 发布时间 */}
@@ -256,19 +256,18 @@ export function SchedulePublishDialog({
             </p>
           </div>
 
-          {/* 来源类型 */}
+          {/* 来源类型 - 使用轻量级 Select 提升性能 */}
           <div className="space-y-2">
             <Label>文章来源</Label>
-            <Select
+            <NativeSelect
               value={sourceType}
               onChange={setSourceType}
+              placeholder="选择来源类型"
               options={[
-                { value: 1, label: "原创" },
-                { value: 2, label: "转载" },
-                { value: 3, label: "翻译" },
+                { value: "1", label: "原创" },
+                { value: "2", label: "转载" },
+                { value: "3", label: "翻译" },
               ]}
-              className="w-full"
-              getPopupContainer={() => containerRef.current || document.body}
             />
           </div>
 
@@ -285,7 +284,7 @@ export function SchedulePublishDialog({
           </div>
         </div>
 
-        <DialogFooter className="flex-col sm:flex-row gap-2">
+        <LightDialogFooter className="flex-col sm:flex-row gap-2">
           {existingTask && (
             <Button
               variant="destructive"
@@ -313,9 +312,9 @@ export function SchedulePublishDialog({
             <Clock className="h-4 w-4 mr-2" />
             {existingTask ? "更新定时" : "确认定时"}
           </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+        </LightDialogFooter>
+      </div>
+    </LightDialog>
   );
 }
 

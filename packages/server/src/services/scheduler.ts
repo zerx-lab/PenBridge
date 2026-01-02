@@ -17,6 +17,9 @@ import { emailService } from "./emailService";
 import { createTencentApiClient } from "./tencentApi";
 import { createJuejinApiClient } from "./juejinApi";
 import { getJuejinCookies } from "./juejinAuth";
+import { transformMarkdownForPlatform } from "./markdownTransformer";
+import { processArticleImages, hasImagesToUpload } from "./imageUpload";
+import * as path from "path";
 
 /**
  * 调度器配置
@@ -488,6 +491,9 @@ export class SchedulerService {
       throw new Error("文章正文建议至少100字");
     }
 
+    // 图片上传目录
+    const UPLOAD_DIR = path.join(process.cwd(), "data", "uploads");
+
     try {
       const client = createJuejinApiClient(cookies);
 
@@ -499,10 +505,47 @@ export class SchedulerService {
         existingDraftId: article.juejinDraftId || "无",
       });
 
+      // 转换扩展语法（掘金不支持对齐语法，需要移除）
+      const { content: transformedContent, report } = transformMarkdownForPlatform(
+        article.content,
+        { platform: "juejin" }
+      );
+      
+      if (report.processed > 0) {
+        console.log(`[Scheduler] 转换了 ${report.processed} 个扩展语法节点`, report.details);
+      }
+
+      // 处理文章中的图片，上传到掘金 ImageX
+      let contentToPublish = transformedContent;
+      if (hasImagesToUpload(transformedContent, "juejin")) {
+        console.log("[Scheduler] 检测到需要上传的图片，开始上传到掘金...");
+        try {
+          const { content: processedContent, results } = await processArticleImages(
+            transformedContent,
+            client,
+            UPLOAD_DIR,
+            "juejin"
+          );
+          contentToPublish = processedContent;
+          
+          const successCount = results.filter(r => r.success).length;
+          console.log(`[Scheduler] 图片上传完成: ${successCount}/${results.length} 成功`);
+          
+          // 如果有图片上传失败，给出警告但继续发布
+          if (successCount < results.length) {
+            console.warn(`[Scheduler] 警告: ${results.length - successCount} 张图片上传失败`);
+          }
+        } catch (imageError) {
+          const errorMsg = imageError instanceof Error ? imageError.message : "未知错误";
+          console.error("[Scheduler] 图片上传失败:", errorMsg);
+          throw new Error(`图片上传失败: ${errorMsg}`);
+        }
+      }
+
       // 一键发布文章（复用已有草稿ID）
       const result = await client.publishArticleOneClick({
         title: article.title,
-        markContent: article.content,
+        markContent: contentToPublish,
         briefContent: article.juejinBriefContent,
         categoryId: article.juejinCategoryId,
         tagIds: article.juejinTagIds,

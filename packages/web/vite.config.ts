@@ -47,6 +47,7 @@ export default defineConfig({
   },
   // 优化依赖预构建
   optimizeDeps: {
+    // mammoth 需要预构建以转换 CommonJS 为 ESM
     include: ["mammoth"],
   },
   server: {
@@ -57,37 +58,63 @@ export default defineConfig({
     __APP_VERSION__: JSON.stringify(appVersion),
   },
   build: {
+    // 启用模块预加载 polyfill
+    modulePreload: {
+      polyfill: true,
+    },
     // 代码分割优化
     rollupOptions: {
       output: {
-        manualChunks: {
-          // 将 React 相关库打包到一起
-          "react-vendor": ["react", "react-dom"],
-          // 将 Ant Design 单独打包
-          "antd-vendor": ["antd", "@ant-design/icons"],
-          // 将路由相关库打包
-          "router-vendor": ["@tanstack/react-router"],
-          // 将 tRPC 和 React Query 打包
-          "query-vendor": ["@trpc/client", "@trpc/react-query", "@tanstack/react-query"],
-          // 将 radix-ui 组件打包
-          "radix-vendor": [
-            "@radix-ui/react-dialog",
-            "@radix-ui/react-dropdown-menu",
-            "@radix-ui/react-popover",
-            "@radix-ui/react-select",
-            "@radix-ui/react-tooltip",
-            "@radix-ui/react-scroll-area",
-            "@radix-ui/react-separator",
-            "@radix-ui/react-tabs",
-            "@radix-ui/react-switch",
-            "@radix-ui/react-label",
-            "@radix-ui/react-avatar",
-            "@radix-ui/react-slot",
-          ],
-          // Markdown 编辑器 (Milkdown)
-          "mdeditor-vendor": ["@milkdown/crepe", "@milkdown/kit"],
+        manualChunks(id) {
+          // React 核心库
+          if (id.includes("node_modules/react/") || id.includes("node_modules/react-dom/")) {
+            return "react-vendor";
+          }
+          // antd 核心组件 - 按使用频率拆分
+          if (id.includes("node_modules/antd/")) {
+            // message/notification 等常用组件
+            if (id.includes("/message") || id.includes("/notification") || id.includes("/_util")) {
+              return "antd-core";
+            }
+            // Select/DatePicker 等表单组件（发布对话框使用）
+            if (id.includes("/select") || id.includes("/date-picker") || id.includes("/time-picker")) {
+              return "antd-form";
+            }
+            // Drawer/Dropdown/Tooltip 等 UI 组件
+            return "antd-ui";
+          }
+          // @ant-design/icons
+          if (id.includes("@ant-design/icons")) {
+            return "antd-icons";
+          }
+          // 路由相关库
+          if (id.includes("@tanstack/react-router")) {
+            return "router-vendor";
+          }
+          // tRPC 和 React Query
+          if (id.includes("@trpc/") || id.includes("@tanstack/react-query")) {
+            return "query-vendor";
+          }
+          // radix-ui 组件
+          if (id.includes("@radix-ui/")) {
+            return "radix-vendor";
+          }
+          // Milkdown 编辑器
+          if (id.includes("@milkdown/")) {
+            return "mdeditor-vendor";
+          }
+          // CodeMirror 编辑器
+          if (id.includes("@codemirror/")) {
+            return "codemirror-vendor";
+          }
           // lucide 图标
-          "icons-vendor": ["lucide-react"],
+          if (id.includes("lucide-react")) {
+            return "icons-vendor";
+          }
+          // mammoth (Word 导入) - 单独打包，延迟加载
+          if (id.includes("mammoth")) {
+            return "mammoth-vendor";
+          }
         },
       },
     },

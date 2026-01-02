@@ -7,6 +7,7 @@ import { Article } from "../../entities/Article";
 import { getJuejinCookies } from "../../services/juejinAuth";
 import { createJuejinApiClient } from "../../services/juejinApi";
 import { processArticleImages, hasImagesToUpload } from "../../services/imageUpload";
+import { transformMarkdownForPlatform } from "../../services/markdownTransformer";
 
 // 掘金相关路由
 export const juejinRouter = t.router({
@@ -158,15 +159,28 @@ export const juejinRouter = t.router({
           existingDraftId: article.juejinDraftId || "无",
         });
 
+        // 先转换 Markdown，移除平台不支持的扩展语法（如 :::center 等）
+        const transformResult = transformMarkdownForPlatform(
+          article.content,
+          { platform: "juejin" }
+        );
+        let contentToPublish = transformResult.content;
+        
+        // 记录转换结果
+        if (transformResult.report.processed > 0) {
+          console.log(`[Juejin] 转换了 ${transformResult.report.processed} 个扩展语法节点:`, transformResult.report.details);
+        } else {
+          console.log("[Juejin] 未检测到需要转换的扩展语法");
+        }
+        
         // 处理文章中的图片，上传到掘金 ImageX
         const UPLOAD_DIR = path.join(process.cwd(), "data", "uploads");
-        let contentToPublish = article.content;
         
-        if (hasImagesToUpload(article.content, "juejin")) {
+        if (hasImagesToUpload(contentToPublish, "juejin")) {
           console.log("[Juejin] 检测到需要上传的图片，开始上传到掘金...");
           try {
             const { content: processedContent, results } = await processArticleImages(
-              article.content,
+              contentToPublish,
               client,
               UPLOAD_DIR,
               "juejin"
@@ -292,15 +306,28 @@ export const juejinRouter = t.router({
       try {
         const client = createJuejinApiClient(cookies);
 
+        // 先转换 Markdown，移除平台不支持的扩展语法（如 :::center 等）
+        const transformResult = transformMarkdownForPlatform(
+          article.content,
+          { platform: "juejin" }
+        );
+        let contentToSync = transformResult.content;
+
+        // 记录转换结果
+        if (transformResult.report.processed > 0) {
+          console.log(`[Juejin] 同步草稿: 转换了 ${transformResult.report.processed} 个扩展语法节点:`, transformResult.report.details);
+        } else {
+          console.log("[Juejin] 同步草稿: 未检测到需要转换的扩展语法");
+        }
+
         // 处理文章中的图片，上传到掘金 ImageX
         const UPLOAD_DIR = path.join(process.cwd(), "data", "uploads");
-        let contentToSync = article.content;
         
-        if (hasImagesToUpload(article.content, "juejin")) {
+        if (hasImagesToUpload(contentToSync, "juejin")) {
           console.log("[Juejin] 同步草稿: 检测到需要上传的图片，开始上传到掘金...");
           try {
             const { content: processedContent, results } = await processArticleImages(
-              article.content,
+              contentToSync,
               client,
               UPLOAD_DIR,
               "juejin"

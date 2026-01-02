@@ -5,6 +5,12 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <link rel="icon" type="image/svg+xml" href="/icon.svg" />
     <title>PenBridge - 多平台文章发布管理</title>
+    
+    <!-- DNS 预解析 - 提前解析 API 服务器域名 -->
+    <link rel="dns-prefetch" href="//localhost:3000" />
+    
+    <!-- 预连接 - 提前建立到 API 服务器的连接 -->
+    <link rel="preconnect" href="http://localhost:3000" crossorigin />
     <style>
       /* 首屏加载样式 - 内联避免额外请求 */
       #app-loading {

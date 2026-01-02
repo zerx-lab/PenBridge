@@ -8,7 +8,7 @@ import type { Node as ProseMirrorNode } from "@milkdown/kit/prose/model";
 import { getServerBaseUrlSync } from "../utils/serverConfig";
 import { createSpellCheckPlugin } from "./SpellCheckPlugin";
 import { isSpellCheckEnabled, SPELL_CHECK_CHANGED_EVENT } from "../utils/spellCheck";
-import { directivePlugins } from "./milkdown-plugins";
+import { directivePlugins, buildLayoutToolbar, imageLayoutToolbarPlugin } from "./milkdown-plugins";
 
 // 所有通用样式（包含所有功能的 CSS）
 import "@milkdown/crepe/theme/common/style.css";
@@ -294,6 +294,7 @@ function MilkdownEditorInner({
 
     // 使用 requestAnimationFrame 延迟初始化，确保 DOM 完全准备好
     const rafId = requestAnimationFrame(() => {
+      console.log("[MilkdownEditor] RAF 回调执行, isMounted:", isMountedRef.current, "value length:", value?.length);
       if (!isMountedRef.current) return;
 
       // 构建 featureConfigs
@@ -301,6 +302,10 @@ function MilkdownEditorInner({
         [Crepe.Feature.Placeholder]: {
           text: placeholder,
           mode: "block",
+        },
+        // 配置工具栏，添加布局按钮
+        [Crepe.Feature.Toolbar]: {
+          buildToolbar: buildLayoutToolbar,
         },
       };
 
@@ -335,6 +340,9 @@ function MilkdownEditorInner({
 
       // 注册 directive 插件（对齐语法: :::left, :::right, :::center, :::justify）
       crepe.editor.use(directivePlugins);
+      
+      // 注册图片布局工具栏插件（点击图片时显示对齐按钮）
+      crepe.editor.use(imageLayoutToolbarPlugin);
 
       // 在 create() 之前配置 upload 插件（处理粘贴/拖拽图片）
       // 注意：.use() 和 .config() 必须在 .create() 之前调用才能生效
@@ -396,6 +404,7 @@ function MilkdownEditorInner({
       });
 
 createPromise = crepe.create().then(() => {
+        console.log("[MilkdownEditor] crepe.create() 完成, isMounted:", isMountedRef.current, "内容长度:", value?.length);
         // 再次检查组件是否仍然挂载
         if (!isMountedRef.current) {
           return;
@@ -588,8 +597,25 @@ createPromise = crepe.create().then(() => {
 
         // 保存 observer 引用以便清理
         (container as HTMLElement & { _slashMenuObserver?: MutationObserver })._slashMenuObserver = observer;
-      }).catch(() => {
-        // 静默忽略创建过程中的错误（通常是组件卸载导致的）
+      }).catch((error) => {
+        // 记录创建过程中的错误，包含更多详细信息
+        console.error("[MilkdownEditor] crepe.create() 失败:", {
+          name: error?.name,
+          code: error?.code,
+          message: error?.message,
+          stack: error?.stack,
+        });
+        // 输出导致问题的内容前100个字符，帮助调试
+        if (value) {
+          console.error("[MilkdownEditor] 内容预览 (前500字符):", value.substring(0, 500));
+          // 检查是否有可能导致问题的语法
+          if (value.includes(":::")) {
+            console.error("[MilkdownEditor] 检测到 ::: 语法，可能是 directive");
+          }
+          if (value.includes("\\[") || value.includes("\\]")) {
+            console.error("[MilkdownEditor] 检测到转义方括号 \\[ 或 \\]");
+          }
+        }
       });
     });
 

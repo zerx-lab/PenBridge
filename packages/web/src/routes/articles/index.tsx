@@ -130,6 +130,8 @@ function ArticlesPage() {
     setIsSyncing(false);
     // 强制刷新文章列表缓存，确保显示最新状态
     await trpcUtils.article.list.invalidate();
+    // 同时刷新文章元数据缓存，确保编辑页面的发布按钮状态同步更新
+    await trpcUtils.article.getMeta.invalidate();
     await refetch();
 
     // 合并结果在一个通知中展示
