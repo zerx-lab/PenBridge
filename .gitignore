@@ -38,3 +38,4 @@ electron/server
 packages/server/dist-electron
 
 packages/video
+nul

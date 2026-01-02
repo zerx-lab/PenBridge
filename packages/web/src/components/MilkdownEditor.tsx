@@ -1,6 +1,10 @@
 import { forwardRef, memo, useEffect, useImperativeHandle, useRef, useState } from "react";
 import { Crepe } from "@milkdown/crepe";
 import { editorViewCtx, parserCtx } from "@milkdown/kit/core";
+import { imageBlockConfig } from "@milkdown/kit/component/image-block";
+import { inlineImageConfig } from "@milkdown/kit/component/image-inline";
+import { upload, uploadConfig } from "@milkdown/kit/plugin/upload";
+import type { Node as ProseMirrorNode } from "@milkdown/kit/prose/model";
 import { getServerBaseUrlSync } from "../utils/serverConfig";
 import { createSpellCheckPlugin } from "./SpellCheckPlugin";
 import { isSpellCheckEnabled, SPELL_CHECK_CHANGED_EVENT } from "../utils/spellCheck";
@@ -130,40 +134,6 @@ function hashBase64(base64: string): string {
   const dataStart = base64.indexOf(",") + 1;
   const dataPart = base64.slice(dataStart, dataStart + 200);
   return `${dataPart.length}_${base64.length}_${dataPart.slice(0, 50)}`;
-}
-
-// 创建 proxyDomURL 处理器，将 base64 图片上传到服务器
-function createProxyDomURL(articleId: number) {
-  return async function proxyDomURL(url: string): Promise<string> {
-    // 如果是 base64 图片，上传到服务器
-    if (url.startsWith("data:image/")) {
-      // 检查缓存，避免重复上传相同的图片
-      const cacheKey = hashBase64(url);
-      const cachedUrl = uploadedBase64Cache.get(cacheKey);
-      if (cachedUrl) {
-        console.log("[MilkdownEditor] 使用缓存的图片 URL:", cachedUrl);
-        return cachedUrl;
-      }
-
-      try {
-        console.log("[MilkdownEditor] 上传 base64 图片...");
-        const file = base64ToFile(url, `paste-${Date.now()}`);
-        const relativeUrl = await uploadImageToServer(file, articleId);
-        // 转换为完整 URL 用于编辑器显示
-        const absoluteUrl = toAbsoluteImageUrl(relativeUrl);
-        // 缓存上传结果（使用完整 URL）
-        uploadedBase64Cache.set(cacheKey, absoluteUrl);
-        console.log("[MilkdownEditor] 图片上传成功:", absoluteUrl);
-        return absoluteUrl;
-      } catch (error) {
-        console.error("上传粘贴的图片失败:", error);
-        // 上传失败时返回原始 URL
-        return url;
-      }
-    }
-    // 其他 URL 直接返回
-    return url;
-  };
 }
 
 // 导出：将 markdown 内容中的 base64 图片替换为服务器 URL（用于保存前处理）
@@ -334,13 +304,14 @@ function MilkdownEditorInner({
       };
 
       // 如果有文章 ID，配置图片上传
+      // 注意：proxyDomURL 在 Crepe 的 featureConfigs 中只接受字符串，
+      // 函数形式需要在 crepe.create() 后通过底层 API 配置
       if (articleId) {
         const uploadHandler = createUploadHandler(articleId);
         featureConfigs[Crepe.Feature.ImageBlock] = {
           onUpload: uploadHandler,
           inlineOnUpload: uploadHandler,
           blockOnUpload: uploadHandler,
-          proxyDomURL: createProxyDomURL(articleId),
         };
       }
 
@@ -360,6 +331,49 @@ function MilkdownEditorInner({
         },
         featureConfigs,
       });
+
+      // 在 create() 之前配置 upload 插件（处理粘贴/拖拽图片）
+      // 注意：.use() 和 .config() 必须在 .create() 之前调用才能生效
+      if (articleId) {
+        crepe.editor
+          .config((ctx) => {
+            ctx.update(uploadConfig.key, (prev) => ({
+              ...prev,
+              enableHtmlFileUploader: true, // 允许从 HTML 粘贴图片
+              uploader: async (files, schema) => {
+                const nodes: ProseMirrorNode[] = [];
+                
+                for (let i = 0; i < files.length; i++) {
+                  const file = files.item(i);
+                  if (!file || !file.type.includes("image")) {
+                    continue;
+                  }
+                  
+                  try {
+                    console.log("[MilkdownEditor] 上传粘贴的图片:", file.name);
+                    const relativeUrl = await uploadImageToServer(file, articleId);
+                    const absoluteUrl = toAbsoluteImageUrl(relativeUrl);
+                    console.log("[MilkdownEditor] 粘贴图片上传成功:", absoluteUrl);
+                    
+                    // 创建 image 节点
+                    const node = schema.nodes.image.createAndFill({
+                      src: absoluteUrl,
+                      alt: file.name,
+                    });
+                    if (node) {
+                      nodes.push(node as ProseMirrorNode);
+                    }
+                  } catch (error) {
+                    console.error("[MilkdownEditor] 上传粘贴图片失败:", error);
+                  }
+                }
+                
+                return nodes;
+              },
+            }));
+          })
+          .use(upload);
+      }
 
       // 使用 on 方法在创建前注册监听器
       crepe.on((listenerManager) => {
@@ -388,6 +402,36 @@ createPromise = crepe.create().then(() => {
         // 设置只读状态
         if (readonly) {
           crepe?.setReadonly(true);
+        }
+
+        // 配置 imageBlock 和 inlineImage 的 onUpload（处理 UI 按钮上传的图片）
+        // 注意：粘贴/拖拽图片由 upload 插件处理，已在 create() 前配置
+        if (articleId && crepe) {
+          try {
+            const imageUploadHandler = async (file: File): Promise<string> => {
+              console.log("[MilkdownEditor] UI上传图片:", file.name);
+              const relativeUrl = await uploadImageToServer(file, articleId);
+              const absoluteUrl = toAbsoluteImageUrl(relativeUrl);
+              console.log("[MilkdownEditor] UI图片上传成功:", absoluteUrl);
+              return absoluteUrl;
+            };
+
+            crepe.editor.action((ctx) => {
+              // 配置 imageBlock 的 onUpload（处理 UI 上传的块级图片）
+              ctx.update(imageBlockConfig.key, (config) => ({
+                ...config,
+                onUpload: imageUploadHandler,
+              }));
+              
+              // 配置 inlineImage 的 onUpload（处理 UI 上传的行内图片）
+              ctx.update(inlineImageConfig.key, (config) => ({
+                ...config,
+                onUpload: imageUploadHandler,
+              }));
+            });
+          } catch (err) {
+            console.warn("[MilkdownEditor] 配置图片上传失败:", err);
+          }
         }
 
         // 添加代码块复制按钮点击反馈

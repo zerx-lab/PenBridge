@@ -81,13 +81,15 @@ async function runWithConcurrency<T>(
 }
 
 // 本地服务器图片 URL 模式（兼容旧格式 /api/upload/ 和新格式 /uploads/）
-const LOCAL_IMAGE_PATTERN = /!\[([^\]]*)\]\((http:\/\/localhost:\d+\/(?:api\/)?uploads?\/[^)]+)\)/g;
+// 支持带 title 的语法: ![alt](url "title") 或 ![alt](url 'title') 或 ![alt](url)
+const LOCAL_IMAGE_PATTERN = /!\[([^\]]*)\]\((http:\/\/localhost:\d+\/(?:api\/)?uploads?\/[^"\s)]+)(?:\s+["'][^"']*["'])?\)/g;
 // 也匹配相对路径的图片（兼容 /api/upload/ 和 /uploads/）
-const RELATIVE_IMAGE_PATTERN = /!\[([^\]]*)\]\((\/(?:api\/)?uploads?\/[^)]+)\)/g;
+const RELATIVE_IMAGE_PATTERN = /!\[([^\]]*)\]\((\/(?:api\/)?uploads?\/[^"\s)]+)(?:\s+["'][^"']*["'])?\)/g;
 // Base64 编码图片模式
 const BASE64_IMAGE_PATTERN = /!\[([^\]]*)\]\((data:image\/([a-zA-Z]+);base64,([^)]+))\)/g;
 // 外部图片 URL 模式（用于检测需要上传的外部图片）
-const EXTERNAL_IMAGE_PATTERN = /!\[([^\]]*)\]\((https?:\/\/[^)]+)\)/g;
+// 支持带 title 的语法: ![alt](url "title") 或 ![alt](url 'title') 或 ![alt](url)
+const EXTERNAL_IMAGE_PATTERN = /!\[([^\]]*)\]\((https?:\/\/[^"\s)]+)(?:\s+["'][^"']*["'])?\)/g;
 
 /**
  * 各平台已托管的图片域名
