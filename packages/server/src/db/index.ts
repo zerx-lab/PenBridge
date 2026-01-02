@@ -16,8 +16,10 @@ import { dirname, join } from "path";
 /**
  * 获取 sql.js WASM 文件路径
  * 
- * 在打包后的环境中，WASM 文件位于可执行文件同目录
- * 在开发环境中，使用 node_modules 中的文件
+ * 优先级：
+ * 1. 可执行文件同目录（Electron 打包环境）
+ * 2. 工作目录（Docker 生产环境）
+ * 3. undefined（开发环境，让 sql.js 自动定位）
  */
 function getWasmPath(): string | undefined {
   // 检查是否是 Bun 编译的独立可执行文件
@@ -28,6 +30,13 @@ function getWasmPath(): string | undefined {
   if (existsSync(bundledWasmPath)) {
     console.log(`[DB] Using bundled WASM: ${bundledWasmPath}`);
     return bundledWasmPath;
+  }
+  
+  // Docker 生产环境：WASM 文件位于工作目录（/app/sql-wasm.wasm）
+  const cwdWasmPath = join(process.cwd(), "sql-wasm.wasm");
+  if (existsSync(cwdWasmPath)) {
+    console.log(`[DB] Using WASM from working directory: ${cwdWasmPath}`);
+    return cwdWasmPath;
   }
   
   // 开发环境：让 sql.js 自动定位 WASM 文件

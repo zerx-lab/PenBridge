@@ -22,6 +22,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # 复制已构建的后端产物
 COPY packages/server/dist/index.js ./index.js
 
+# 复制 sql.js WASM 文件（sql.js 需要这个文件来运行 SQLite）
+COPY packages/server/node_modules/sql.js/dist/sql-wasm.wasm ./sql-wasm.wasm
+
 # 复制 prompts 目录
 COPY packages/server/src/prompts ./prompts
 
