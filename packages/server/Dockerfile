@@ -78,8 +78,8 @@ COPY --from=server-builder /app/packages/server/src/prompts ./prompts
 # 从前端构建阶段复制构建产物到 public 目录
 COPY --from=web-builder /app/packages/web/dist ./public
 
-# 复制 sql.js 的 wasm 文件（运行时需要）
-COPY --from=server-builder /app/packages/server/node_modules/sql.js/dist/sql-wasm.wasm ./node_modules/sql.js/dist/sql-wasm.wasm
+# 复制 sql.js 的 wasm 文件到工作目录（运行时需要，代码会从 process.cwd() 查找）
+COPY --from=server-builder /app/packages/server/node_modules/sql.js/dist/sql-wasm.wasm ./sql-wasm.wasm
 
 # 创建数据目录
 RUN mkdir -p /app/data/uploads && chmod -R 755 /app/data

@@ -19,11 +19,13 @@ import { dirname, join } from "path";
  * 优先级：
  * 1. 可执行文件同目录（Electron 打包环境）
  * 2. 工作目录（Docker 生产环境）
- * 3. undefined（开发环境，让 sql.js 自动定位）
+ * 3. node_modules（开发环境）
+ * 
+ * 注意：必须始终返回有效路径，不能返回 undefined
+ * 因为 Bun 打包后 sql.js 内部的 __dirname 会指向错误的路径
  */
-function getWasmPath(): string | undefined {
-  // 检查是否是 Bun 编译的独立可执行文件
-  // Bun 编译后 process.execPath 指向可执行文件本身
+function getWasmPath(): string {
+  // 1. 检查可执行文件同目录（Electron 打包环境）
   const execDir = dirname(process.execPath);
   const bundledWasmPath = join(execDir, "sql-wasm.wasm");
   
@@ -32,16 +34,37 @@ function getWasmPath(): string | undefined {
     return bundledWasmPath;
   }
   
-  // Docker 生产环境：WASM 文件位于工作目录（/app/sql-wasm.wasm）
+  // 2. Docker 生产环境：WASM 文件位于工作目录（/app/sql-wasm.wasm）
   const cwdWasmPath = join(process.cwd(), "sql-wasm.wasm");
   if (existsSync(cwdWasmPath)) {
     console.log(`[DB] Using WASM from working directory: ${cwdWasmPath}`);
     return cwdWasmPath;
   }
   
-  // 开发环境：让 sql.js 自动定位 WASM 文件
-  console.log("[DB] Using default WASM location (development mode)");
-  return undefined;
+  // 3. 开发环境：使用 node_modules 中的 WASM 文件
+  // 从当前工作目录向上查找 node_modules
+  const nodeModulesWasmPath = join(process.cwd(), "node_modules/sql.js/dist/sql-wasm.wasm");
+  if (existsSync(nodeModulesWasmPath)) {
+    console.log(`[DB] Using WASM from node_modules: ${nodeModulesWasmPath}`);
+    return nodeModulesWasmPath;
+  }
+  
+  // 4. 尝试 packages/server/node_modules（monorepo 开发环境）
+  const serverNodeModulesWasmPath = join(process.cwd(), "packages/server/node_modules/sql.js/dist/sql-wasm.wasm");
+  if (existsSync(serverNodeModulesWasmPath)) {
+    console.log(`[DB] Using WASM from server node_modules: ${serverNodeModulesWasmPath}`);
+    return serverNodeModulesWasmPath;
+  }
+  
+  // 如果都找不到，抛出错误
+  throw new Error(
+    `Cannot find sql-wasm.wasm file. Searched locations:\n` +
+    `  - ${bundledWasmPath}\n` +
+    `  - ${cwdWasmPath}\n` +
+    `  - ${nodeModulesWasmPath}\n` +
+    `  - ${serverNodeModulesWasmPath}\n` +
+    `Please ensure sql-wasm.wasm is available in one of these locations.`
+  );
 }
 
 // 默认数据库路径，可通过 setDatabasePath 修改
@@ -101,14 +124,11 @@ async function createDataSource(): Promise<DataSource> {
     mkdirSync(dataDir, { recursive: true });
   }
 
-  // 获取 WASM 文件路径（打包环境 vs 开发环境）
+  // 获取 WASM 文件路径（始终明确指定，避免 Bun 打包后路径错误）
   const wasmPath = getWasmPath();
-  const initOptions: any = {};
-  
-  if (wasmPath) {
-    // 打包环境：指定 WASM 文件路径
-    initOptions.locateFile = () => wasmPath;
-  }
+  const initOptions: any = {
+    locateFile: () => wasmPath,
+  };
   
   const driver = await initSqlJs(initOptions);
   
