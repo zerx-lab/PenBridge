@@ -42,9 +42,13 @@ FROM oven/bun:1 AS server-builder
 WORKDIR /app
 
 # 复制后端 package.json 和 lock 文件
-COPY packages/server/package.json packages/server/bun.lock* ./
+COPY packages/server/package.json packages/server/bun.lock* ./packages/server/
+
+# 复制 shared 包（后端依赖）
+COPY packages/shared ./packages/shared
 
 # 安装后端依赖
+WORKDIR /app/packages/server
 RUN bun install
 
 # 复制后端源代码
@@ -66,16 +70,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # 从后端构建阶段复制构建产物
-COPY --from=server-builder /app/dist ./dist
+COPY --from=server-builder /app/packages/server/dist ./dist
 
 # 从后端构建阶段复制 prompts 目录
-COPY --from=server-builder /app/src/prompts ./prompts
+COPY --from=server-builder /app/packages/server/src/prompts ./prompts
 
 # 从前端构建阶段复制构建产物到 public 目录
 COPY --from=web-builder /app/packages/web/dist ./public
 
 # 复制 sql.js 的 wasm 文件（运行时需要）
-COPY --from=server-builder /app/node_modules/sql.js/dist/sql-wasm.wasm ./node_modules/sql.js/dist/sql-wasm.wasm
+COPY --from=server-builder /app/packages/server/node_modules/sql.js/dist/sql-wasm.wasm ./node_modules/sql.js/dist/sql-wasm.wasm
 
 # 创建数据目录
 RUN mkdir -p /app/data/uploads && chmod -R 755 /app/data
