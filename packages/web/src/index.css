@@ -1579,3 +1579,88 @@ a .text-foreground,
   background: transparent;
 }
 
+/* ==================== 对齐容器样式 ==================== */
+/* 对齐 Directive 容器样式 */
+.directive-left,
+.directive-right,
+.directive-center,
+.directive-justify {
+  padding: 8px 0;
+  margin: 8px 0;
+  min-height: 1em;
+}
+
+.directive-left {
+  text-align: left;
+}
+
+.directive-right {
+  text-align: right;
+}
+
+.directive-center {
+  text-align: center;
+}
+
+.directive-justify {
+  text-align: justify;
+}
+
+/* 编辑器中的对齐容器添加轻微边框，方便识别 */
+.milkdown-editor .directive-left,
+.milkdown-editor .directive-right,
+.milkdown-editor .directive-center,
+.milkdown-editor .directive-justify {
+  border-left: 2px solid var(--border);
+  padding-left: 12px;
+  position: relative;
+}
+
+/* 添加对齐类型标识 */
+.milkdown-editor .directive-left::before,
+.milkdown-editor .directive-right::before,
+.milkdown-editor .directive-center::before,
+.milkdown-editor .directive-justify::before {
+  position: absolute;
+  left: -2px;
+  top: 0;
+  font-size: 10px;
+  color: var(--muted-foreground);
+  background: var(--background);
+  padding: 0 4px;
+  transform: translateY(-50%);
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+.milkdown-editor .directive-left:hover::before,
+.milkdown-editor .directive-right:hover::before,
+.milkdown-editor .directive-center:hover::before,
+.milkdown-editor .directive-justify:hover::before {
+  opacity: 1;
+}
+
+.milkdown-editor .directive-left::before {
+  content: "left";
+}
+
+.milkdown-editor .directive-right::before {
+  content: "right";
+}
+
+.milkdown-editor .directive-center::before {
+  content: "center";
+}
+
+.milkdown-editor .directive-justify::before {
+  content: "justify";
+}
+
+/* 暗色模式适配 */
+.dark .milkdown-editor .directive-left,
+.dark .milkdown-editor .directive-right,
+.dark .milkdown-editor .directive-center,
+.dark .milkdown-editor .directive-justify {
+  border-left-color: var(--border);
+}
+

@@ -9,6 +9,7 @@ import { Article } from "../entities/Article";
 import { User } from "../entities/User";
 import { createJuejinApiClient, type TagInfo } from "./juejinApi";
 import { processArticleImages, hasImagesToUpload } from "./imageUpload";
+import { transformMarkdownForPlatform } from "./markdownTransformer";
 
 // 图片上传目录
 const UPLOAD_DIR = path.join(process.cwd(), "data", "uploads");
@@ -110,13 +111,23 @@ class JuejinSyncService {
     try {
       const client = await this.getApiClient(userId);
 
+      // 转换扩展语法（掘金不支持对齐语法，需要移除）
+      const { content: transformedContent, report } = transformMarkdownForPlatform(
+        article.content,
+        { platform: "juejin" }
+      );
+      
+      if (report.processed > 0) {
+        console.log(`[JuejinSync] 转换了 ${report.processed} 个扩展语法节点`, report.details);
+      }
+
       // 处理文章中的图片，上传到掘金 ImageX
-      let contentToSync = article.content;
-      if (hasImagesToUpload(article.content, "juejin")) {
+      let contentToSync = transformedContent;
+      if (hasImagesToUpload(transformedContent, "juejin")) {
         console.log("[JuejinSync] 检测到需要上传的图片，开始上传到掘金...");
         try {
           const { content: processedContent, results } = await processArticleImages(
-            article.content,
+            transformedContent,
             client,
             UPLOAD_DIR,
             "juejin"
@@ -208,13 +219,23 @@ class JuejinSyncService {
     try {
       const client = await this.getApiClient(userId);
 
+      // 转换扩展语法（掘金不支持对齐语法，需要移除）
+      const { content: transformedContent, report } = transformMarkdownForPlatform(
+        article.content,
+        { platform: "juejin" }
+      );
+      
+      if (report.processed > 0) {
+        console.log(`[JuejinSync] 转换了 ${report.processed} 个扩展语法节点`, report.details);
+      }
+
       // 处理文章中的图片，上传到掘金 ImageX
-      let contentToPublish = article.content;
-      if (hasImagesToUpload(article.content, "juejin")) {
+      let contentToPublish = transformedContent;
+      if (hasImagesToUpload(transformedContent, "juejin")) {
         console.log("[JuejinSync] 检测到需要上传的图片，开始上传到掘金...");
         try {
           const { content: processedContent, results } = await processArticleImages(
-            article.content,
+            transformedContent,
             client,
             UPLOAD_DIR,
             "juejin"

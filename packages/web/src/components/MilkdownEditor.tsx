@@ -8,6 +8,7 @@ import type { Node as ProseMirrorNode } from "@milkdown/kit/prose/model";
 import { getServerBaseUrlSync } from "../utils/serverConfig";
 import { createSpellCheckPlugin } from "./SpellCheckPlugin";
 import { isSpellCheckEnabled, SPELL_CHECK_CHANGED_EVENT } from "../utils/spellCheck";
+import { directivePlugins } from "./milkdown-plugins";
 
 // 所有通用样式（包含所有功能的 CSS）
 import "@milkdown/crepe/theme/common/style.css";
@@ -332,6 +333,9 @@ function MilkdownEditorInner({
         featureConfigs,
       });
 
+      // 注册 directive 插件（对齐语法: :::left, :::right, :::center, :::justify）
+      crepe.editor.use(directivePlugins);
+
       // 在 create() 之前配置 upload 插件（处理粘贴/拖拽图片）
       // 注意：.use() 和 .config() 必须在 .create() 之前调用才能生效
       if (articleId) {
@@ -406,32 +410,39 @@ createPromise = crepe.create().then(() => {
 
         // 配置 imageBlock 和 inlineImage 的 onUpload（处理 UI 按钮上传的图片）
         // 注意：粘贴/拖拽图片由 upload 插件处理，已在 create() 前配置
+        // 注意：这些配置已在 featureConfigs 中通过 Crepe.Feature.ImageBlock 设置，
+        // 这里的配置是备用方案，仅在上下文可用时才尝试更新
         if (articleId && crepe) {
-          try {
-            const imageUploadHandler = async (file: File): Promise<string> => {
-              console.log("[MilkdownEditor] UI上传图片:", file.name);
-              const relativeUrl = await uploadImageToServer(file, articleId);
-              const absoluteUrl = toAbsoluteImageUrl(relativeUrl);
-              console.log("[MilkdownEditor] UI图片上传成功:", absoluteUrl);
-              return absoluteUrl;
-            };
+          const imageUploadHandler = async (file: File): Promise<string> => {
+            console.log("[MilkdownEditor] UI上传图片:", file.name);
+            const relativeUrl = await uploadImageToServer(file, articleId);
+            const absoluteUrl = toAbsoluteImageUrl(relativeUrl);
+            console.log("[MilkdownEditor] UI图片上传成功:", absoluteUrl);
+            return absoluteUrl;
+          };
 
-            crepe.editor.action((ctx) => {
-              // 配置 imageBlock 的 onUpload（处理 UI 上传的块级图片）
+          crepe.editor.action((ctx) => {
+            // 配置 imageBlock 的 onUpload（处理 UI 上传的块级图片）
+            // 使用 try-catch 包裹每个配置，因为上下文可能不存在
+            try {
               ctx.update(imageBlockConfig.key, (config) => ({
                 ...config,
                 onUpload: imageUploadHandler,
               }));
-              
-              // 配置 inlineImage 的 onUpload（处理 UI 上传的行内图片）
+            } catch {
+              // imageBlockConfig 上下文不存在，已通过 featureConfigs 配置
+            }
+            
+            // 配置 inlineImage 的 onUpload（处理 UI 上传的行内图片）
+            try {
               ctx.update(inlineImageConfig.key, (config) => ({
                 ...config,
                 onUpload: imageUploadHandler,
               }));
-            });
-          } catch (err) {
-            console.warn("[MilkdownEditor] 配置图片上传失败:", err);
-          }
+            } catch {
+              // inlineImageConfig 上下文不存在，Crepe 默认不启用 inlineImage
+            }
+          });
         }
 
         // 添加代码块复制按钮点击反馈
