@@ -310,18 +310,17 @@ export const aiChatRouter = t.router({
     }),
 
   // 获取或创建文章关联的默认会话
+  // 注意：每个文章只有一个会话，与选择的模型无关
   getOrCreateArticleSession: protectedProcedure
     .input(
       z.object({
         articleId: z.number(),
-        modelId: z.string().optional(),
-        providerId: z.number().optional(),
       })
     )
     .mutation(async ({ input }) => {
       const sessionRepo = AppDataSource.getRepository(AIChatSession);
       
-      // 查找文章关联的最近会话
+      // 查找文章关联的会话（每个文章只有一个会话）
       let session = await sessionRepo.findOne({
         where: { articleId: input.articleId, userId: 1 },
         order: { updatedAt: "DESC" },
@@ -333,8 +332,6 @@ export const aiChatRouter = t.router({
           userId: 1,
           articleId: input.articleId,
           title: "文章助手",
-          modelId: input.modelId,
-          providerId: input.providerId,
         });
         await sessionRepo.save(session);
       }

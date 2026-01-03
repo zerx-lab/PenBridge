@@ -10,8 +10,9 @@ import {
  * AI SDK 类型
  * - openai: 使用 @ai-sdk/openai，适用于 OpenAI 官方模型（原生支持 reasoning）
  * - openai-compatible: 使用 @ai-sdk/openai-compatible，适用于兼容 OpenAI API 的第三方服务
+ * - github-copilot: 使用 GitHub Copilot API，通过 OAuth Device Flow 认证
  */
-export type AISDKType = "openai" | "openai-compatible";
+export type AISDKType = "openai" | "openai-compatible" | "github-copilot";
 
 /**
  * AI 供应商实体

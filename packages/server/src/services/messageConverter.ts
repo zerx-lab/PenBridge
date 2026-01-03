@@ -7,11 +7,19 @@
  */
 
 /**
+ * 用户消息内容部分（支持图片）
+ */
+export type UserContentPart =
+  | { type: "text"; text: string }
+  | { type: "image_url"; image_url: { url: string } };
+
+/**
  * OpenAI 格式的消息
  */
 export interface OpenAIMessage {
   role: "system" | "user" | "assistant" | "tool";
-  content: string | null;
+  // content 可以是字符串，也可以是多部分数组（用于图片等）
+  content: string | null | UserContentPart[];
   tool_calls?: Array<{
     id: string;
     type: "function";
@@ -27,13 +35,14 @@ export interface OpenAIMessage {
 /**
  * AI SDK v6 格式的内容部分
  * 注意: tool-call 使用 `input` 字段而不是 `args`，这是 @ai-sdk/openai-compatible 的要求
+ * 图片使用 image 格式: { type: "image", image: "base64..." 或 URL, mediaType?: "image/xxx" }
  */
 export type AISDKContentPart =
   | { type: "text"; text: string }
   | { type: "tool-call"; toolCallId: string; toolName: string; input: Record<string, any> }
   | { type: "tool-result"; toolCallId: string; toolName: string; output: ToolResultOutput }
   | { type: "reasoning"; text: string }
-  | { type: "file"; data: string; mimeType: string };
+  | { type: "image"; image: string; mediaType?: string }; // AI SDK 的图片格式
 
 /**
  * 工具结果输出格式 (AI SDK v6 要求)
@@ -186,7 +195,7 @@ function convertAssistantMessage(msg: OpenAIMessage): AISDKMessage {
       part.type === "tool-call" ||
       part.type === "tool-result" ||
       part.type === "reasoning" ||
-      part.type === "file"
+      part.type === "image"
     );
     if (isValidAISDKFormat) {
       // 已经是 AI SDK 格式，直接返回
@@ -233,10 +242,57 @@ function convertAssistantMessage(msg: OpenAIMessage): AISDKMessage {
   }
 
   // 普通 assistant 消息
+  // assistant 消息的 content 应该是字符串
+  const assistantContent = typeof msg.content === "string" ? msg.content : (msg.content ? JSON.stringify(msg.content) : "");
   return {
     role: "assistant",
-    content: msg.content || "",
+    content: assistantContent,
   };
+}
+
+/**
+ * 转换用户消息的内容（处理图片）
+ */
+function convertUserContent(content: string | null | UserContentPart[]): string | AISDKContentPart[] {
+  // 字符串或 null，直接返回
+  if (content === null || typeof content === "string") {
+    return content || "";
+  }
+  
+  // 数组格式，需要转换 image_url 为 AI SDK 的 image 格式
+  console.log(`${logPrefix} 检测到多部分消息内容，共 ${content.length} 个部分`);
+  
+  return content.map((part, index): AISDKContentPart => {
+    if (part.type === "text") {
+      console.log(`${logPrefix}   [${index}] text: ${part.text.substring(0, 50)}...`);
+      return { type: "text", text: part.text };
+    }
+    if (part.type === "image_url") {
+      const imageUrl = part.image_url.url;
+      const isBase64 = imageUrl.startsWith("data:image/");
+      console.log(`${logPrefix}   [${index}] image_url: ${isBase64 ? `base64 (${imageUrl.length} chars)` : imageUrl.substring(0, 50)}`);
+      
+      // AI SDK v6 使用 image 格式: { type: "image", image: "base64..." 或 URL, mediaType?: "image/xxx" }
+      if (isBase64) {
+        // 从 data URL 提取 mediaType 和纯 base64 数据
+        // 格式: data:image/png;base64,xxxxx
+        const match = imageUrl.match(/^data:(image\/[^;]+);base64,(.+)$/);
+        if (match) {
+          const mediaType = match[1];
+          const base64Data = match[2];
+          // AI SDK 接受纯 base64 字符串或完整的 data URL
+          return { type: "image", image: base64Data, mediaType };
+        }
+        // 如果没有匹配到，尝试直接使用完整的 data URL
+        return { type: "image", image: imageUrl, mediaType: "image/png" };
+      }
+      // 如果是外部 URL，也使用 image 格式
+      return { type: "image", image: imageUrl, mediaType: "image/png" };
+    }
+    // 未知类型，作为文本处理
+    console.log(`${logPrefix}   [${index}] unknown type: ${(part as any).type}`);
+    return { type: "text", text: JSON.stringify(part) };
+  });
 }
 
 /**
@@ -259,10 +315,10 @@ export function convertMessagesToAISDK(messages: OpenAIMessage[]): AISDKMessage[
       return convertAssistantMessage(msg);
     }
 
-    // system 和 user 消息保持原样
+    // system 和 user 消息：需要转换内容格式（处理图片）
     return {
       role: msg.role,
-      content: msg.content || "",
+      content: convertUserContent(msg.content),
     };
   });
 }

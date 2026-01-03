@@ -1,7 +1,7 @@
 // AI 配置相关类型定义
 
 // SDK 类型
-export type AISDKType = "openai" | "openai-compatible";
+export type AISDKType = "openai" | "openai-compatible" | "github-copilot";
 
 // 供应商类型
 export interface Provider {

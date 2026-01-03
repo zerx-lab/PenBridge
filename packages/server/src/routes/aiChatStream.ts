@@ -6,7 +6,7 @@
  */
 import { Hono } from "hono";
 import { streamSSE } from "hono/streaming";
-import { streamText } from "ai";
+import { streamText, jsonSchema } from "ai";
 import { AppDataSource } from "../db";
 import { AIProvider, AIModel, defaultCapabilities, defaultAILoopConfig } from "../entities/AIProvider";
 import { validateSession } from "../services/adminAuth";
@@ -16,7 +16,9 @@ import {
   createProviderAdapter, 
   buildStreamTextOptions,
   type ThinkingConfig,
+  type GitHubCopilotAdapterOptions,
 } from "../services/aiProviderAdapter";
+import { CopilotAuth } from "../entities/CopilotAuth";
 import { 
   convertMessagesToAISDK, 
   setLogPrefix, 
@@ -195,7 +197,40 @@ aiChatStreamRouter.post("/", async (c) => {
     const capabilities = modelConfig?.capabilities || defaultCapabilities;
 
     // 创建 Provider 适配器
-    const adapter = createProviderAdapter(provider);
+    // 对于 GitHub Copilot，需要获取认证信息
+    let copilotOptions: GitHubCopilotAdapterOptions | undefined;
+    if (provider.sdkType === "github-copilot") {
+      const copilotAuthRepo = AppDataSource.getRepository(CopilotAuth);
+      const copilotAuth = await copilotAuthRepo.findOne({ where: { userId: 1 } });
+      
+      if (!copilotAuth) {
+        logStep("错误: GitHub Copilot 未连接");
+        return c.json({ error: "GitHub Copilot 未连接，请先在设置中连接" }, 400);
+      }
+      
+      copilotOptions = {
+        auth: {
+          refreshToken: copilotAuth.refreshToken,
+          accessToken: copilotAuth.accessToken,
+          expiresAt: copilotAuth.expiresAt,
+          enterpriseUrl: copilotAuth.enterpriseUrl,
+        },
+        // Token 更新回调：保存刷新后的 token 到数据库
+        onTokenUpdate: async (newAuth) => {
+          await copilotAuthRepo.update(
+            { userId: 1 },
+            {
+              accessToken: newAuth.accessToken,
+              expiresAt: newAuth.expiresAt,
+            }
+          );
+          logStep("Copilot Token 已自动刷新并保存");
+        },
+      };
+      logStep("已获取 GitHub Copilot 认证信息");
+    }
+
+    const adapter = createProviderAdapter(provider, copilotOptions);
     const model = adapter.createModel(modelId);
     logStep(`使用 ${provider.sdkType} SDK 创建模型: ${modelId}`);
 
@@ -246,7 +281,8 @@ aiChatStreamRouter.post("/", async (c) => {
       for (const tool of apiTools) {
         tools[tool.function.name] = {
           description: tool.function.description,
-          parameters: tool.function.parameters,
+          // AI SDK 期望 inputSchema 字段，使用 jsonSchema() 包装原始 JSON Schema
+          inputSchema: jsonSchema(tool.function.parameters as any),
           // 不在服务端执行，返回给前端
         };
       }

@@ -80,6 +80,17 @@ contextBridge.exposeInMainWorld("electronAPI", {
     syncToServer: () => ipcRenderer.invoke("juejinAuth:syncToServer"),
   },
 
+  // GitHub Copilot 认证辅助（主要逻辑在后端）
+  copilotAuth: {
+    // 打开 GitHub 设备授权页面
+    openVerificationPage: (verificationUri: string) =>
+      ipcRenderer.invoke("copilotAuth:openVerificationPage", verificationUri),
+
+    // 复制用户码到剪贴板
+    copyUserCode: (userCode: string) =>
+      ipcRenderer.invoke("copilotAuth:copyUserCode", userCode),
+  },
+
   // 服务器配置相关
   serverConfig: {
     // 获取服务器配置
@@ -184,6 +195,10 @@ declare global {
         logout: () => Promise<{ success: boolean }>;
         getCookies: () => Promise<string | null>;
         syncToServer: () => Promise<{ success: boolean; message?: string }>;
+      };
+      copilotAuth: {
+        openVerificationPage: (verificationUri: string) => Promise<{ success: boolean; message?: string }>;
+        copyUserCode: (userCode: string) => Promise<{ success: boolean; message?: string }>;
       };
       serverConfig: {
         get: () => Promise<{ baseUrl: string; isConfigured: boolean }>;

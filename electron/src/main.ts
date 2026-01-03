@@ -2,6 +2,7 @@ import { app, BrowserWindow, ipcMain, session, Menu, globalShortcut, shell } fro
 import * as path from "path";
 import { TencentAuth } from "./auth/tencentAuth";
 import { JuejinAuth } from "./auth/juejinAuth";
+import { registerCopilotAuthHandlers } from "./auth/copilotAuth";
 import { createStore, AppMode } from "./store";
 import { initAutoUpdater } from "./autoUpdater";
 import {
@@ -515,6 +516,7 @@ function registerJuejinAuthHandlers() {
 function registerIpcHandlers() {
   registerTencentAuthHandlers();
   registerJuejinAuthHandlers();
+  registerCopilotAuthHandlers();
 }
 
 // 初始化应用模式（启动本地服务器等）

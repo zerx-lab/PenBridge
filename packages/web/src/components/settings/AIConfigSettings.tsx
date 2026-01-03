@@ -7,6 +7,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { trpc } from "@/utils/trpc";
+import { CopilotConnect } from "./ai-config/CopilotConnect";
 import { ProviderManager } from "./ai-config/ProviderManager";
 import { ModelManager } from "./ai-config/ModelManager";
 import { TestDialog } from "./ai-config/TestDialog";
@@ -48,6 +49,9 @@ export function AIConfigSettings() {
           配置 AI 供应商和模型，用于智能写作辅助功能
         </p>
       </div>
+
+      {/* GitHub Copilot 连接 */}
+      <CopilotConnect />
 
       {/* 供应商管理 */}
       <ProviderManager providers={providers as Provider[] | undefined} />

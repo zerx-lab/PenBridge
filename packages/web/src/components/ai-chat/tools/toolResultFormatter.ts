@@ -118,14 +118,17 @@ export function buildAssistantMessageWithToolCalls(
   };
 }
 
+// 消息内容类型：支持纯文本或多部分内容（用于图片等）
+export type MessageContent = string | Array<{ type: string; text?: string; image_url?: { url: string } }>;
+
 /**
  * 构建继续对话的消息历史
  */
 export function buildContinueMessageHistory(
-  previousHistory: Array<{ role: string; content: string }>,
+  previousHistory: Array<{ role: string; content: MessageContent }>,
   assistantContent: string,
   toolCalls: ToolCallRecord[]
-): Array<{ role: string; content: string; tool_calls?: any; tool_call_id?: string }> {
+): Array<{ role: string; content: MessageContent; tool_calls?: any; tool_call_id?: string }> {
   const toolResultMessages = buildToolResultMessages(toolCalls);
 
   return [

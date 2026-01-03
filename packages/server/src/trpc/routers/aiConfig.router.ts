@@ -51,7 +51,7 @@ export const aiConfigRouter = t.router({
         name: z.string().min(1, "请输入供应商名称"),
         baseUrl: z.string().url("请输入有效的 URL"),
         apiKey: z.string().min(1, "请输入 API Key"),
-        sdkType: z.enum(["openai", "openai-compatible"]).default("openai-compatible"),
+        sdkType: z.enum(["openai", "openai-compatible", "github-copilot"]).default("openai-compatible"),
       })
     )
     .mutation(async ({ input }) => {
@@ -88,7 +88,7 @@ export const aiConfigRouter = t.router({
         baseUrl: z.string().url().optional(),
         apiKey: z.string().optional(),
         enabled: z.boolean().optional(),
-        sdkType: z.enum(["openai", "openai-compatible"]).optional(),
+        sdkType: z.enum(["openai", "openai-compatible", "github-copilot"]).optional(),
       })
     )
     .mutation(async ({ input }) => {

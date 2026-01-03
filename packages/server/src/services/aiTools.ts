@@ -9,9 +9,12 @@
 import { AppDataSource } from "../db";
 import { Article } from "../entities/Article";
 import { AIProvider, AIModel } from "../entities/AIProvider";
+import { CopilotAuth } from "../entities/CopilotAuth";
+import { getCopilotToken, getCopilotApiBaseUrl, COPILOT_HEADERS } from "./githubCopilotAuth";
 
 /**
  * 工具定义接口
+ * 注意: required 字段必须存在（可以为空数组），以兼容 GitHub Copilot 等严格的 API
  */
 export interface ToolDefinition {
   type: "function";
@@ -26,7 +29,7 @@ export interface ToolDefinition {
         enum?: string[];
         default?: any;
       }>;
-      required?: string[];
+      required: string[]; // 必须存在，可以为空数组
     };
   };
   // 标记工具执行位置
@@ -57,14 +60,15 @@ export const frontendToolDefinitions: ToolDefinition[] = [
             default: "all",
           },
           startLine: {
-            type: "number",
+            type: "integer",
             description: "起始行号（从 1 开始，包含）",
           },
           endLine: {
-            type: "number",
+            type: "integer",
             description: "结束行号（包含）。不指定则默认读取 200 行",
           },
         },
+        required: [],
       },
     },
     executionLocation: "frontend",
@@ -160,11 +164,12 @@ export const backendToolDefinitions: ToolDefinition[] = [
             description: "搜索关键词（可选）",
           },
           limit: {
-            type: "number",
+            type: "integer",
             description: "返回结果数量限制",
             default: 10,
           },
         },
+        required: [],
       },
     },
     executionLocation: "backend",
@@ -178,7 +183,7 @@ export const backendToolDefinitions: ToolDefinition[] = [
         type: "object",
         properties: {
           articleId: {
-            type: "number",
+            type: "integer",
             description: "文章 ID",
           },
         },
@@ -389,7 +394,8 @@ async function findVisionModel(): Promise<{
   // 查找支持视觉的模型
   for (const model of models) {
     const capabilities = model.capabilities as any;
-    if (capabilities?.vision?.supported) {
+    // vision 是 boolean 类型，直接判断
+    if (capabilities?.vision === true) {
       const provider = await providerRepo.findOne({
         where: { id: model.providerId, userId: 1, enabled: true },
       });
@@ -428,8 +434,38 @@ async function analyzeImage(
       // Base64 格式，直接使用
       imageUrl = imageSource;
     } else if (imageSource.startsWith("http://") || imageSource.startsWith("https://")) {
-      // URL 格式，直接使用
-      imageUrl = imageSource;
+      // 检查是否是本地地址（localhost 或 127.0.0.1）
+      const isLocalUrl = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?/i.test(imageSource);
+      
+      if (isLocalUrl) {
+        // 本地地址：需要在服务端获取图片并转换为 base64
+        // 因为外部 AI 服务无法访问本地地址
+        console.log(`[AI Tool] view_image 检测到本地图片地址，正在转换为 base64: ${imageSource}`);
+        try {
+          const imageResponse = await fetch(imageSource);
+          if (!imageResponse.ok) {
+            return {
+              success: false,
+              error: `无法获取本地图片: HTTP ${imageResponse.status}`,
+            };
+          }
+          
+          const contentType = imageResponse.headers.get("content-type") || "image/png";
+          const arrayBuffer = await imageResponse.arrayBuffer();
+          const base64 = Buffer.from(arrayBuffer).toString("base64");
+          imageUrl = `data:${contentType};base64,${base64}`;
+          console.log(`[AI Tool] view_image 本地图片转换成功，大小: ${Math.round(base64.length / 1024)}KB`);
+        } catch (fetchError) {
+          console.error(`[AI Tool] view_image 获取本地图片失败:`, fetchError);
+          return {
+            success: false,
+            error: `获取本地图片失败: ${fetchError instanceof Error ? fetchError.message : "未知错误"}`,
+          };
+        }
+      } else {
+        // 外部 URL，直接使用
+        imageUrl = imageSource;
+      }
     } else {
       // 可能是相对路径，尝试转换为本地 base64
       // 这里暂时只支持 URL 和 Base64
@@ -459,15 +495,42 @@ async function analyzeImage(
     ];
     
     // 发送请求到视觉模型
-    const apiUrl = `${provider.baseUrl}/chat/completions`;
-    console.log(`[AI Tool] view_image 调用视觉模型: ${model.modelId} @ ${provider.name}`);
+    let apiUrl: string;
+    let headers: Record<string, string> = {
+      "Content-Type": "application/json",
+    };
+    
+    // 处理 GitHub Copilot 特殊情况
+    if (provider.sdkType === "github-copilot") {
+      const copilotAuthRepo = AppDataSource.getRepository(CopilotAuth);
+      const copilotAuth = await copilotAuthRepo.findOne({ where: { userId: 1 } });
+      
+      if (!copilotAuth) {
+        return { success: false, error: "GitHub Copilot 未连接" };
+      }
+      
+      // 获取有效的 access token（如果过期会自动刷新）
+      const tokenInfo = await getCopilotToken(copilotAuth.refreshToken, copilotAuth.enterpriseUrl);
+      apiUrl = `${getCopilotApiBaseUrl(copilotAuth.enterpriseUrl)}/chat/completions`;
+      
+      headers["Authorization"] = `Bearer ${tokenInfo.token}`;
+      // 添加 Copilot 特定请求头
+      Object.entries(COPILOT_HEADERS).forEach(([key, value]) => {
+        headers[key] = value;
+      });
+      // 视觉请求必须添加此头
+      headers["Copilot-Vision-Request"] = "true";
+      
+      console.log(`[AI Tool] view_image 使用 GitHub Copilot: ${model.modelId}`);
+    } else {
+      apiUrl = `${provider.baseUrl}/chat/completions`;
+      headers["Authorization"] = `Bearer ${provider.apiKey}`;
+      console.log(`[AI Tool] view_image 调用视觉模型: ${model.modelId} @ ${provider.name}`);
+    }
     
     const response = await fetch(apiUrl, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${provider.apiKey}`,
-      },
+      headers,
       body: JSON.stringify({
         model: model.modelId,
         messages,

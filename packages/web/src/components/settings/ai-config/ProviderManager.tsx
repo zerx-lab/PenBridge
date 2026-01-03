@@ -234,7 +234,7 @@ export function ProviderManager({ providers }: ProviderManagerProps) {
                   <Label htmlFor="provider-sdkType">SDK 类型</Label>
                   <Select
                     value={providerForm.sdkType}
-                    onValueChange={(value: "openai" | "openai-compatible") => setProviderForm({ ...providerForm, sdkType: value })}
+                    onValueChange={(value: "openai" | "openai-compatible" | "github-copilot") => setProviderForm({ ...providerForm, sdkType: value })}
                   >
                     <SelectTrigger id="provider-sdkType">
                       <SelectValue placeholder="选择 SDK 类型" />
@@ -242,11 +242,14 @@ export function ProviderManager({ providers }: ProviderManagerProps) {
                     <SelectContent>
                       <SelectItem value="openai">OpenAI 官方</SelectItem>
                       <SelectItem value="openai-compatible">OpenAI 兼容</SelectItem>
+                      <SelectItem value="github-copilot" disabled>GitHub Copilot</SelectItem>
                     </SelectContent>
                   </Select>
                   <p className="text-xs text-muted-foreground">
                     {providerForm.sdkType === "openai" 
                       ? "仅用于 OpenAI 官方 API (api.openai.com)，原生支持 o1/o3/gpt-5 推理"
+                      : providerForm.sdkType === "github-copilot"
+                      ? "通过 GitHub Copilot 连接，请使用上方的连接按钮"
                       : "适用于智谱、DeepSeek、通义千问、Moonshot 等兼容 OpenAI 格式的服务商"}
                   </p>
                 </div>
@@ -287,7 +290,11 @@ export function ProviderManager({ providers }: ProviderManagerProps) {
                   </TableCell>
                   <TableCell>
                     <Badge variant="outline" className="text-xs">
-                      {provider.sdkType === "openai" ? "OpenAI" : "兼容"}
+                      {provider.sdkType === "openai" 
+                        ? "OpenAI" 
+                        : provider.sdkType === "github-copilot" 
+                        ? "Copilot" 
+                        : "兼容"}
                     </Badge>
                   </TableCell>
                   <TableCell>

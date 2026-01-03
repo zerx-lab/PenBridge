@@ -4,7 +4,7 @@
  * 支持待确认变更的管理
  */
 
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import { getApiBaseUrl } from "@/utils/serverConfig";
 import { getAuthToken } from "@/utils/auth";
 import type { 
@@ -12,9 +12,10 @@ import type {
   FrontendToolContext,
   ToolCallRecord,
   UseAIChatReturn,
+  QueuedMessage,
 } from "../types";
 import { executeToolCalls } from "../tools/frontendTools";
-import { buildContinueMessageHistory } from "../tools/toolResultFormatter";
+import { buildContinueMessageHistory, type MessageContent } from "../tools/toolResultFormatter";
 import { useChatSession } from "./useChatSession";
 import { usePendingChanges } from "./usePendingChanges";
 import { DEFAULT_MAX_LOOP_COUNT, ARGS_UPDATE_THROTTLE } from "./constants";
@@ -35,11 +36,14 @@ export function useAIChat(options: UseAIChatOptions): UseAIChatReturn {
   const [error, setError] = useState<string | null>(null);
   const [currentLoopCount, setCurrentLoopCount] = useState(0);
   
+  // 待发送消息队列
+  const [queuedMessages, setQueuedMessages] = useState<QueuedMessage[]>([]);
+  
   // Refs
   const abortControllerRef = useRef<AbortController | null>(null);
   const currentMessageIdRef = useRef<string | null>(null);
   // 用于打破循环依赖的 ref
-  const sendMessageToAPIRef = useRef<((messageHistory: Array<{ role: string; content: string }>, loopCount?: number) => Promise<void>) | null>(null);
+  const sendMessageToAPIRef = useRef<((messageHistory: Array<{ role: string; content: MessageContent }>, loopCount?: number) => Promise<void>) | null>(null);
   
   // 使用会话管理 Hook
   const sessionState = useChatSession({ articleId });
@@ -166,27 +170,38 @@ export function useAIChat(options: UseAIChatOptions): UseAIChatReturn {
   
   // 发送消息并处理流式响应
   const sendMessageToAPI = useCallback(async (
-    messageHistory: Array<{ role: string; content: string }>,
+    messageHistory: Array<{ role: string; content: MessageContent }>,
     loopCount: number = 0
   ): Promise<void> => {
     console.log(`[AI Loop] sendMessageToAPI 开始, loopCount=${loopCount}, 消息数量=${messageHistory.length}`);
     
-    // 调试：打印消息历史
-    if (loopCount > 0) {
-      console.log('[AI Loop] 消息历史详情:');
-      messageHistory.forEach((msg, i) => {
+    // 调试：打印消息历史（包括图片信息）
+    console.log('[AI Loop] 消息历史详情:');
+    messageHistory.forEach((msg, i) => {
+      const isArray = Array.isArray(msg.content);
+      if (isArray) {
+        console.log(`  [${i}] role=${msg.role}, content=Array[${(msg.content as any[]).length}]`);
+        (msg.content as any[]).forEach((part, j) => {
+          if (part.type === 'image_url') {
+            const url = part.image_url?.url || '';
+            console.log(`    part[${j}] type=image_url, url长度=${url.length}, 是base64=${url.startsWith('data:image/')}`);
+          } else {
+            console.log(`    part[${j}] type=${part.type}, text=${part.text?.substring(0, 50) || ''}`);
+          }
+        });
+      } else {
         const contentPreview = typeof msg.content === 'string' 
           ? msg.content.substring(0, 200) + (msg.content.length > 200 ? '...' : '')
           : JSON.stringify(msg.content).substring(0, 200);
         console.log(`  [${i}] role=${msg.role}, content=${contentPreview}`);
-        if ((msg as any).tool_calls) {
-          console.log(`       tool_calls:`, (msg as any).tool_calls);
-        }
-        if ((msg as any).tool_call_id) {
-          console.log(`       tool_call_id:`, (msg as any).tool_call_id);
-        }
-      });
-    }
+      }
+      if ((msg as any).tool_calls) {
+        console.log(`       tool_calls:`, (msg as any).tool_calls);
+      }
+      if ((msg as any).tool_call_id) {
+        console.log(`       tool_call_id:`, (msg as any).tool_call_id);
+      }
+    });
     
     if (!selectedModel) {
       setError("请先选择 AI 模型");
@@ -648,19 +663,49 @@ export function useAIChat(options: UseAIChatOptions): UseAIChatReturn {
   sendMessageToAPIRef.current = sendMessageToAPI;
   
   // 发送用户消息
-  const sendMessage = useCallback(async (content: string) => {
-    if (!content.trim() || isLoading || isStreaming) return;
+  // content 可以是纯文本，也可以是带图片的多部分消息（JSON 字符串）
+  const sendMessage = useCallback(async (content: string, images?: string[]) => {
+    if ((!content.trim() && (!images || images.length === 0)) || isLoading || isStreaming) return;
     
     setError(null);
     setIsLoading(true);
     setCurrentLoopCount(0);
     
+    // 构建消息内容：如果有图片，使用多部分格式
+    let messageContent: string | Array<{ type: string; text?: string; image_url?: { url: string } }>;
+    let displayContent: string;
+    
+    if (images && images.length > 0) {
+      // 构建多部分消息内容
+      const parts: Array<{ type: string; text?: string; image_url?: { url: string } }> = [];
+      
+      if (content.trim()) {
+        parts.push({ type: "text", text: content.trim() });
+      }
+      
+      for (const imageBase64 of images) {
+        parts.push({
+          type: "image_url",
+          image_url: { url: imageBase64 },
+        });
+      }
+      
+      messageContent = parts;
+      // 显示内容：只显示文本部分，图片由 images 字段单独展示
+      displayContent = content.trim();
+    } else {
+      messageContent = content.trim();
+      displayContent = content.trim();
+    }
+    
     const userMessage: ChatMessage = {
       id: `user_${Date.now()}`,
       role: "user",
-      content: content.trim(),
+      content: displayContent,
       status: "completed",
       createdAt: new Date().toISOString(),
+      // 保存图片数据用于展示
+      images: images && images.length > 0 ? images : undefined,
     };
     
     setMessages(prev => [...prev, userMessage]);
@@ -670,7 +715,7 @@ export function useAIChat(options: UseAIChatOptions): UseAIChatReturn {
         await addMessageMutation.mutateAsync({
           sessionId: session.id,
           role: "user",
-          content: content.trim(),
+          content: displayContent,
           status: "completed",
         });
       } catch (err) {
@@ -683,18 +728,48 @@ export function useAIChat(options: UseAIChatOptions): UseAIChatReturn {
         role: m.role,
         content: m.content,
       })),
-      { role: "user", content: content.trim() },
+      { role: "user", content: messageContent },
     ];
     
     await sendMessageToAPI(messageHistory, 0);
   }, [isLoading, isStreaming, messages, session, addMessageMutation, sendMessageToAPI, setMessages]);
   
-  // 停止生成
+  // 停止生成 - 中断所有正在进行的操作并重置状态
   const stopGeneration = useCallback(() => {
+    // 中断正在进行的网络请求
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
+      abortControllerRef.current = null;
     }
-  }, []);
+    
+    // 重置所有加载状态
+    setIsLoading(false);
+    setIsStreaming(false);
+    
+    // 清除待确认变更的暂存状态
+    if (pendingChangesState.pausedStateRef.current) {
+      pendingChangesState.pausedStateRef.current = null;
+    }
+    
+    // 将当前正在流式输出的消息标记为已完成
+    if (currentMessageIdRef.current) {
+      setMessages(prev => prev.map(m => 
+        m.id === currentMessageIdRef.current 
+          ? { 
+              ...m, 
+              status: "completed" as const,
+              // 如果有正在执行的工具调用，标记为失败
+              toolCalls: m.toolCalls?.map(tc => 
+                tc.status === "running" || tc.status === "pending"
+                  ? { ...tc, status: "failed" as const, error: "用户中断" }
+                  : tc
+              ),
+            }
+          : m
+      ));
+      currentMessageIdRef.current = null;
+    }
+  }, [setMessages, pendingChangesState]);
   
   // 清空消息（扩展版本）
   const clearMessages = useCallback(async () => {
@@ -703,6 +778,134 @@ export function useAIChat(options: UseAIChatOptions): UseAIChatReturn {
     setCurrentLoopCount(0);
     setError(null);
   }, [sessionClearMessages, pendingChangesState]);
+  
+  // 编辑并重新发送消息
+  // 找到指定的用户消息，删除该消息及其后的所有消息，然后发送新消息
+  const editAndResend = useCallback(async (messageId: string | number, newContent: string, newImages?: string[]) => {
+    if ((!newContent.trim() && (!newImages || newImages.length === 0)) || isLoading || isStreaming) return;
+    
+    // 找到要编辑的消息的索引
+    const messageIndex = messages.findIndex(m => m.id === messageId);
+    if (messageIndex === -1) {
+      console.error('[editAndResend] 未找到消息:', messageId);
+      return;
+    }
+    
+    // 验证这是一个用户消息
+    const targetMessage = messages[messageIndex];
+    if (targetMessage.role !== "user") {
+      console.error('[editAndResend] 只能编辑用户消息');
+      return;
+    }
+    
+    setError(null);
+    setIsLoading(true);
+    setCurrentLoopCount(0);
+    
+    // 截断消息列表，保留编辑消息之前的所有消息
+    const messagesBeforeEdit = messages.slice(0, messageIndex);
+    
+    // 构建消息内容：如果有图片，使用多部分格式
+    let messageContent: string | Array<{ type: string; text?: string; image_url?: { url: string } }>;
+    let displayContent: string;
+    
+    if (newImages && newImages.length > 0) {
+      // 构建多部分消息内容
+      const parts: Array<{ type: string; text?: string; image_url?: { url: string } }> = [];
+      
+      if (newContent.trim()) {
+        parts.push({ type: "text", text: newContent.trim() });
+      }
+      
+      for (const imageBase64 of newImages) {
+        parts.push({
+          type: "image_url",
+          image_url: { url: imageBase64 },
+        });
+      }
+      
+      messageContent = parts;
+      displayContent = newContent.trim();
+    } else {
+      messageContent = newContent.trim();
+      displayContent = newContent.trim();
+    }
+    
+    // 创建新的用户消息
+    const userMessage: ChatMessage = {
+      id: `user_${Date.now()}`,
+      role: "user",
+      content: displayContent,
+      status: "completed",
+      createdAt: new Date().toISOString(),
+      images: newImages && newImages.length > 0 ? newImages : undefined,
+    };
+    
+    // 更新消息列表：保留编辑前的消息 + 新的用户消息
+    setMessages([...messagesBeforeEdit, userMessage]);
+    
+    // 保存用户消息到数据库
+    if (session) {
+      try {
+        await addMessageMutation.mutateAsync({
+          sessionId: session.id,
+          role: "user",
+          content: displayContent,
+          status: "completed",
+        });
+      } catch (err) {
+        console.error("保存用户消息失败:", err);
+      }
+    }
+    
+    // 构建消息历史并发送
+    const messageHistory = [
+      ...messagesBeforeEdit.filter(m => m.role !== "tool").map(m => ({
+        role: m.role,
+        content: m.content,
+      })),
+      { role: "user", content: messageContent },
+    ];
+    
+    await sendMessageToAPI(messageHistory, 0);
+  }, [isLoading, isStreaming, messages, session, addMessageMutation, sendMessageToAPI, setMessages]);
+  
+  // 添加消息到队列（AI 正在回复时使用）
+  const queueMessage = useCallback((content: string, images?: string[]) => {
+    const newQueuedMessage: QueuedMessage = {
+      id: `queued_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      content: content.trim(),
+      images: images && images.length > 0 ? images : undefined,
+      createdAt: new Date(),
+    };
+    setQueuedMessages(prev => [...prev, newQueuedMessage]);
+  }, []);
+  
+  // 移除队列中的消息
+  const removeQueuedMessage = useCallback((id: string) => {
+    setQueuedMessages(prev => prev.filter(m => m.id !== id));
+  }, []);
+  
+  // 清空队列
+  const clearQueuedMessages = useCallback(() => {
+    setQueuedMessages([]);
+  }, []);
+  
+  // 用于自动发送队列消息的 ref（避免闭包问题）
+  const sendMessageRef = useRef(sendMessage);
+  sendMessageRef.current = sendMessage;
+  
+  // 当 AI 回复完成后，自动发送队列中的第一条消息
+  useEffect(() => {
+    // 只在不处于加载/流式状态且队列中有消息时处理
+    if (!isLoading && !isStreaming && queuedMessages.length > 0) {
+      const firstMessage = queuedMessages[0];
+      // 移除已发送的消息
+      setQueuedMessages(prev => prev.slice(1));
+      // 发送消息
+      sendMessageRef.current(firstMessage.content, firstMessage.images);
+    }
+  }, [isLoading, isStreaming, queuedMessages]);
   
   return {
     session,
@@ -716,9 +919,14 @@ export function useAIChat(options: UseAIChatOptions): UseAIChatReturn {
     thinkingSettings,
     setThinkingSettings,
     sendMessage,
+    queueMessage,
     stopGeneration,
     clearMessages,
     createNewSession,
+    editAndResend,
+    queuedMessages,
+    removeQueuedMessage,
+    clearQueuedMessages,
     currentLoopCount,
     maxLoopCount: selectedModel?.aiLoopConfig?.maxLoops || DEFAULT_MAX_LOOP_COUNT,
     unlimitedLoop: selectedModel?.aiLoopConfig?.unlimited || false,

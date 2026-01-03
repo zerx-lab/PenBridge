@@ -8,6 +8,7 @@ import { AdminUser } from "../entities/AdminUser";
 import { AdminSession } from "../entities/AdminSession";
 import { AIProvider, AIModel } from "../entities/AIProvider";
 import { AIChatSession, AIChatMessage } from "../entities/AIChat";
+import { CopilotAuth } from "../entities/CopilotAuth";
 // @ts-ignore
 import initSqlJs from "sql.js";
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from "fs";
@@ -137,7 +138,7 @@ async function createDataSource(): Promise<DataSource> {
     database: existsSync(DB_PATH) ? readFileSync(DB_PATH) : undefined,
     synchronize: true, // 自动迁移数据模型
     logging: false,
-    entities: [User, Article, Folder, ScheduledTask, EmailConfig, AdminUser, AdminSession, AIProvider, AIModel, AIChatSession, AIChatMessage],
+    entities: [User, Article, Folder, ScheduledTask, EmailConfig, AdminUser, AdminSession, AIProvider, AIModel, AIChatSession, AIChatMessage, CopilotAuth],
     driver,
     autoSave: true,
     autoSaveCallback: createDebouncedSave(),

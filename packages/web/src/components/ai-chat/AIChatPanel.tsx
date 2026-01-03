@@ -6,7 +6,6 @@
 import { useState, useRef, useCallback, useEffect, useMemo } from "react";
 import {
   Send,
-  Loader2,
   Bot,
   Trash2,
   StopCircle,
@@ -15,6 +14,7 @@ import {
   Brain,
   Settings2,
   Zap,
+  X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -31,6 +31,7 @@ import { useToolPermissions } from "./hooks/useToolPermissions";
 import { ToolPermissionDialog } from "./ToolPermissionDialog";
 import { AILoadingIndicator } from "./AILoadingIndicator";
 import { MessageItem } from "./MessageItem";
+import { QueuedMessageItem } from "./QueuedMessageItem";
 import type { AIChatPanelProps } from "./types";
 
 // 最小宽度（最大宽度不限制，可自由拖拽）
@@ -51,6 +52,8 @@ export function AIChatPanel({
   const [internalWidth, setInternalWidth] = useState(externalWidth || DEFAULT_WIDTH);
   const width = externalWidth ?? internalWidth;
   const [permissionDialogOpen, setPermissionDialogOpen] = useState(false);
+  // 粘贴的图片（base64 格式）
+  const [pastedImages, setPastedImages] = useState<string[]>([]);
   
   // Refs
   const panelRef = useRef<HTMLDivElement>(null);
@@ -79,8 +82,13 @@ export function AIChatPanel({
     thinkingSettings,
     setThinkingSettings,
     sendMessage,
+    queueMessage,
     stopGeneration,
     clearMessages,
+    editAndResend,
+    // 待发送消息队列
+    queuedMessages,
+    removeQueuedMessage,
     currentLoopCount,
     maxLoopCount,
     // 待确认变更
@@ -200,22 +208,82 @@ export function AIChatPanel({
     document.addEventListener("mouseup", handleMouseUp);
   }, [width, onWidthChange]);
   
+  // 处理粘贴事件
+  const handlePaste = useCallback((e: React.ClipboardEvent) => {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+    
+    for (const item of items) {
+      if (item.type.startsWith("image/")) {
+        e.preventDefault();
+        const file = item.getAsFile();
+        if (!file) continue;
+        
+        // 将图片转换为 base64
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          const base64 = event.target?.result as string;
+          if (base64) {
+            setPastedImages(prev => [...prev, base64]);
+          }
+        };
+        reader.readAsDataURL(file);
+        break; // 只处理第一张图片
+      }
+    }
+  }, []);
+  
+  // 移除粘贴的图片
+  const removePastedImage = useCallback((index: number) => {
+    setPastedImages(prev => prev.filter((_, i) => i !== index));
+  }, []);
+  
   // 发送消息
   const handleSend = useCallback(async () => {
-    if (!inputValue.trim() || isLoading || isStreaming) return;
+    if (!inputValue.trim() && pastedImages.length === 0) return;
     
     const message = inputValue.trim();
+    const images = pastedImages.length > 0 ? [...pastedImages] : undefined;
+    
     setInputValue("");
-    await sendMessage(message);
-  }, [inputValue, isLoading, isStreaming, sendMessage]);
+    setPastedImages([]);
+    
+    // 如果 AI 正在回复，将消息加入队列
+    if (isLoading || isStreaming) {
+      queueMessage(message || "请描述这张图片", images);
+      return;
+    }
+    
+    // 直接发送消息
+    await sendMessage(message || "请描述这张图片", images);
+  }, [inputValue, pastedImages, isLoading, isStreaming, sendMessage, queueMessage]);
   
-  // 键盘事件
+  // 键盘事件（输入框内）
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       handleSend();
     }
   }, [handleSend]);
+  
+  // 全局快捷键：Ctrl+N 清空会话
+  useEffect(() => {
+    const handleGlobalKeyDown = (e: KeyboardEvent) => {
+      // Ctrl+N 或 Cmd+N 清空会话
+      if ((e.ctrlKey || e.metaKey) && e.key === "n") {
+        // 只有当 AI 面板打开时才处理
+        if (!isOpen) return;
+        // 正在加载或流式输出时不处理
+        if (isLoading || isStreaming) return;
+        
+        e.preventDefault();
+        clearMessages();
+      }
+    };
+    
+    window.addEventListener("keydown", handleGlobalKeyDown);
+    return () => window.removeEventListener("keydown", handleGlobalKeyDown);
+  }, [isOpen, isLoading, isStreaming, clearMessages]);
   
   // 模型选择 - 使用 ref 存储最新的 availableModels 以避免依赖变化导致的重新渲染
   const availableModelsRef = useRef(availableModels);
@@ -300,7 +368,7 @@ export function AIChatPanel({
                   <Trash2 className="h-3.5 w-3.5" />
                 </Button>
               </TooltipTrigger>
-              <TooltipContent side="left">清空对话</TooltipContent>
+              <TooltipContent side="left">清空对话 (Ctrl+N)</TooltipContent>
             </Tooltip>
           </TooltipProvider>
           <TooltipProvider>
@@ -381,6 +449,9 @@ export function AIChatPanel({
                     currentPendingChange={currentPendingChange}
                     onAcceptChange={acceptPendingChange}
                     onRejectChange={rejectPendingChange}
+                    onEditMessage={editAndResend}
+                    isLoading={isLoading}
+                    isStreaming={isStreaming}
                   />
                 ))}
                 {/* AI 正在等待响应的 Loading 状态 */}
@@ -413,6 +484,21 @@ export function AIChatPanel({
                     : "AI 正在思考...";
                   return <AILoadingIndicator message={loadingMessage} />;
                 })()}
+                
+                {/* 待发送消息队列 */}
+                {queuedMessages.length > 0 && (
+                  <>
+                    {queuedMessages.map((queuedMsg, index) => (
+                      <QueuedMessageItem
+                        key={queuedMsg.id}
+                        message={queuedMsg}
+                        index={index}
+                        onRemove={removeQueuedMessage}
+                      />
+                    ))}
+                  </>
+                )}
+                
                 <div ref={messagesEndRef} />
               </>
             )}
@@ -441,6 +527,27 @@ export function AIChatPanel({
         
         {/* 输入区域 - 参考 Claude 风格 */}
         <div className="border-t shrink-0">
+          {/* 粘贴的图片预览 */}
+          {pastedImages.length > 0 && (
+            <div className="px-3 pt-3 flex flex-wrap gap-2">
+              {pastedImages.map((image, index) => (
+                <div key={index} className="relative group">
+                  <img
+                    src={image}
+                    alt={`粘贴的图片 ${index + 1}`}
+                    className="h-16 w-16 object-cover rounded border"
+                  />
+                  <button
+                    onClick={() => removePastedImage(index)}
+                    className="absolute -top-1.5 -right-1.5 bg-red-500 text-white rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition-opacity"
+                    type="button"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
           {/* 输入框 */}
           <div className="px-3 pt-3">
             <Textarea
@@ -448,14 +555,17 @@ export function AIChatPanel({
               value={inputValue}
               onChange={(e) => setInputValue(e.target.value)}
               onKeyDown={handleKeyDown}
+              onPaste={handlePaste}
               placeholder={
                 !selectedModel 
                   ? "请先选择 AI 模型..." 
-                  : isStreaming 
-                    ? "AI 正在回复..." 
-                    : "输入消息..."
+                  : (isLoading || isStreaming)
+                    ? "输入消息加入待发送队列..."
+                    : pastedImages.length > 0
+                      ? "添加描述或直接发送图片..."
+                      : "输入消息，可粘贴图片..."
               }
-              disabled={!selectedModel || isLoading}
+              disabled={!selectedModel}
               className="resize-none min-h-[60px] max-h-[150px] border-0 shadow-none focus-visible:ring-0 px-0"
               rows={2}
             />
@@ -529,31 +639,49 @@ export function AIChatPanel({
                 }))}
               />
               
-              {/* 发送/停止按钮 */}
-              {isStreaming ? (
-                <Button
-                  variant="secondary"
-                  size="icon"
-                  className="h-7 w-7 rounded-full bg-red-500 hover:bg-red-600 text-white"
-                  onClick={stopGeneration}
-                >
-                  <StopCircle className="h-4 w-4" />
-                </Button>
-              ) : (
-                <Button
-                  variant="secondary"
-                  size="icon"
-                  className="h-7 w-7 rounded-full bg-purple-500 hover:bg-purple-600 text-white disabled:opacity-50"
-                  onClick={handleSend}
-                  disabled={!inputValue.trim() || isLoading || !selectedModel}
-                >
-                  {isLoading ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <Send className="h-3.5 w-3.5" />
-                  )}
-                </Button>
+              {/* 停止按钮 - 加载中或流式输出时显示 */}
+              {(isLoading || isStreaming) && (
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant="secondary"
+                        size="icon"
+                        className="h-7 w-7 rounded-full bg-red-500 hover:bg-red-600 text-white"
+                        onClick={stopGeneration}
+                      >
+                        <StopCircle className="h-4 w-4" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent side="top">停止生成</TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
               )}
+              
+              {/* 发送按钮 - 始终显示，AI 回复时变为队列模式 */}
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="secondary"
+                      size="icon"
+                      className={cn(
+                        "h-7 w-7 rounded-full text-white disabled:opacity-50",
+                        (isLoading || isStreaming)
+                          ? "bg-blue-400 hover:bg-blue-500"
+                          : "bg-purple-500 hover:bg-purple-600"
+                      )}
+                      onClick={handleSend}
+                      disabled={(!inputValue.trim() && pastedImages.length === 0) || !selectedModel}
+                    >
+                      <Send className="h-3.5 w-3.5" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent side="top">
+                    {(isLoading || isStreaming) ? "加入待发送队列" : "发送消息"}
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
             </div>
           </div>
         </div>

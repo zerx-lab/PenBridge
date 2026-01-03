@@ -1,7 +1,11 @@
+import { useState, useCallback, useRef, useEffect } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { Bot, Loader2 } from "lucide-react";
+import { Image } from "antd";
+import { Bot, Loader2, Pencil, X, Check } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
 import { ThinkingBlock } from "./ThinkingBlock";
 import { ToolCallBlock } from "./ToolCallBlock";
 import type { ChatMessage, PendingChange } from "./types";
@@ -12,6 +16,10 @@ interface MessageItemProps {
   currentPendingChange?: PendingChange | null;
   onAcceptChange?: (change: PendingChange) => void;
   onRejectChange?: (change: PendingChange) => void;
+  // 编辑功能
+  onEditMessage?: (messageId: string | number, newContent: string, newImages?: string[]) => Promise<void>;
+  isLoading?: boolean;
+  isStreaming?: boolean;
 }
 
 /**
@@ -24,17 +32,190 @@ export function MessageItem({
   currentPendingChange,
   onAcceptChange,
   onRejectChange,
+  onEditMessage,
+  isLoading = false,
+  isStreaming: parentIsStreaming = false,
 }: MessageItemProps) {
   const isUser = message.role === "user";
   const isStreaming = message.status === "streaming";
   const isFailed = message.status === "failed";
 
+  // 编辑状态
+  const [isEditing, setIsEditing] = useState(false);
+  const [editContent, setEditContent] = useState("");
+  const [editImages, setEditImages] = useState<string[]>([]);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  // 进入编辑模式
+  const handleStartEdit = useCallback(() => {
+    setEditContent(message.content);
+    setEditImages(message.images || []);
+    setIsEditing(true);
+  }, [message.content, message.images]);
+
+  // 取消编辑
+  const handleCancelEdit = useCallback(() => {
+    setIsEditing(false);
+    setEditContent("");
+    setEditImages([]);
+  }, []);
+
+  // 提交编辑
+  const handleSubmitEdit = useCallback(async () => {
+    if (!onEditMessage || (!editContent.trim() && editImages.length === 0)) return;
+    
+    setIsSubmitting(true);
+    try {
+      await onEditMessage(message.id, editContent.trim(), editImages.length > 0 ? editImages : undefined);
+      setIsEditing(false);
+      setEditContent("");
+      setEditImages([]);
+    } finally {
+      setIsSubmitting(false);
+    }
+  }, [onEditMessage, message.id, editContent, editImages]);
+
+  // 处理键盘事件
+  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      handleSubmitEdit();
+    }
+    if (e.key === "Escape") {
+      handleCancelEdit();
+    }
+  }, [handleSubmitEdit, handleCancelEdit]);
+
+  // 移除编辑中的图片
+  const handleRemoveEditImage = useCallback((index: number) => {
+    setEditImages(prev => prev.filter((_, i) => i !== index));
+  }, []);
+
+  // 自动聚焦编辑框
+  useEffect(() => {
+    if (isEditing && textareaRef.current) {
+      textareaRef.current.focus();
+      // 将光标移到末尾
+      textareaRef.current.selectionStart = textareaRef.current.value.length;
+      textareaRef.current.selectionEnd = textareaRef.current.value.length;
+    }
+  }, [isEditing]);
+
   // 用户消息 - 简洁的气泡样式
   if (isUser) {
+    const hasImages = message.images && message.images.length > 0;
+    const hasText = message.content && message.content.trim().length > 0;
+    // 是否可以编辑（不在加载或流式输出状态）
+    const canEdit = onEditMessage && !isLoading && !parentIsStreaming && !isSubmitting;
+    
+    // 编辑模式
+    if (isEditing) {
+      return (
+        <div className="flex justify-end py-2">
+          <div className="max-w-[85%] w-full">
+            {/* 编辑中的图片预览 */}
+            {editImages.length > 0 && (
+              <div className="flex flex-wrap gap-2 mb-2 justify-end">
+                {editImages.map((image, index) => (
+                  <div key={index} className="relative group">
+                    <img
+                      src={image}
+                      alt={`图片 ${index + 1}`}
+                      className="h-16 w-16 object-cover rounded border"
+                    />
+                    <button
+                      onClick={() => handleRemoveEditImage(index)}
+                      className="absolute -top-1.5 -right-1.5 bg-red-500 text-white rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition-opacity"
+                      type="button"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+            {/* 编辑输入框 */}
+            <div className="bg-blue-50 dark:bg-blue-900/30 rounded-lg p-2 border border-blue-200 dark:border-blue-700">
+              <Textarea
+                ref={textareaRef}
+                value={editContent}
+                onChange={(e) => setEditContent(e.target.value)}
+                onKeyDown={handleKeyDown}
+                placeholder="编辑消息..."
+                className="resize-none min-h-[60px] max-h-[150px] border-0 shadow-none focus-visible:ring-0 bg-transparent text-sm"
+                rows={2}
+                disabled={isSubmitting}
+              />
+              <div className="flex justify-end gap-2 mt-2">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 text-xs"
+                  onClick={handleCancelEdit}
+                  disabled={isSubmitting}
+                >
+                  <X className="h-3 w-3 mr-1" />
+                  取消
+                </Button>
+                <Button
+                  variant="default"
+                  size="sm"
+                  className="h-7 text-xs bg-blue-500 hover:bg-blue-600"
+                  onClick={handleSubmitEdit}
+                  disabled={isSubmitting || (!editContent.trim() && editImages.length === 0)}
+                >
+                  {isSubmitting ? (
+                    <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                  ) : (
+                    <Check className="h-3 w-3 mr-1" />
+                  )}
+                  发送
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // 普通显示模式
     return (
-      <div className="flex justify-end py-2">
+      <div className="flex justify-end py-2 group">
+        {/* 编辑按钮 - hover 时显示 */}
+        {canEdit && (
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity mr-2 self-center"
+            onClick={handleStartEdit}
+          >
+            <Pencil className="h-3 w-3 text-muted-foreground" />
+          </Button>
+        )}
         <div className="max-w-[85%] bg-blue-500 text-white px-3 py-2 rounded-lg text-sm">
-          <div className="whitespace-pre-wrap break-words">{message.content}</div>
+          {/* 文本内容 */}
+          {hasText && (
+            <div className="whitespace-pre-wrap break-words">{message.content}</div>
+          )}
+          {/* 图片列表 - 使用 antd Image 组件支持预览 */}
+          {hasImages && (
+            <div className={cn("flex flex-wrap gap-2", hasText && "mt-2")}>
+              <Image.PreviewGroup>
+                {message.images!.map((image, index) => (
+                  <Image
+                    key={index}
+                    src={image}
+                    alt={`图片 ${index + 1}`}
+                    width={200}
+                    height={150}
+                    className="rounded border border-white/20 object-cover"
+                    style={{ maxWidth: 200, maxHeight: 150, objectFit: "cover" }}
+                  />
+                ))}
+              </Image.PreviewGroup>
+            </div>
+          )}
         </div>
       </div>
     );

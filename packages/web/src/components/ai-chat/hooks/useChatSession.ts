@@ -162,18 +162,17 @@ export function useChatSession(options: UseChatSessionOptions): ChatSessionState
   }, [messagesData, session?.id]);
   
   // 初始化或获取会话
+  // 注意：会话只根据 articleId 进行关联，每个文章只有一个会话，与选择的模型无关
   useEffect(() => {
     const initSession = async () => {
       if (isInitializingSessionRef.current) return;
       if (initializedArticleIdRef.current === articleId && session) return;
       
-      if (articleId && selectedModel) {
+      if (articleId) {
         isInitializingSessionRef.current = true;
         try {
           const sess = await getOrCreateSessionMutation.mutateAsync({
             articleId,
-            modelId: selectedModel.modelId,
-            providerId: selectedModel.providerId,
           });
           currentSessionIdRef.current = sess.id;
           initializedArticleIdRef.current = articleId;
@@ -188,7 +187,7 @@ export function useChatSession(options: UseChatSessionOptions): ChatSessionState
     
     initSession();
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [articleId, selectedModel?.id]);
+  }, [articleId]);
   
   // 保存深度思考设置到 localStorage
   useEffect(() => {
@@ -196,21 +195,18 @@ export function useChatSession(options: UseChatSessionOptions): ChatSessionState
   }, [thinkingSettings]);
   
   // 创建新会话
+  // 注意：会话只根据 articleId 进行关联，不再依赖模型信息
   const createNewSession = useCallback(async () => {
-    if (!selectedModel) return;
-    
     try {
       const newSession = await createSessionMutation.mutateAsync({
         articleId,
-        modelId: selectedModel.modelId,
-        providerId: selectedModel.providerId,
       });
       setSession(newSession);
       setMessages([]);
     } catch (err) {
       console.error("创建会话失败:", err);
     }
-  }, [selectedModel, articleId, createSessionMutation]);
+  }, [articleId, createSessionMutation]);
   
   // 清空消息
   const clearMessages = useCallback(async () => {

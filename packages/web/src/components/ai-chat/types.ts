@@ -218,6 +218,16 @@ export interface ChatMessage {
   error?: string;
   duration?: number;
   createdAt: Date | string;
+  // 用户消息中的图片（base64 格式）
+  images?: string[];
+}
+
+// 待发送消息（在队列中等待发送）
+export interface QueuedMessage {
+  id: string;
+  content: string;
+  images?: string[];
+  createdAt: Date;
 }
 
 // 聊天会话
@@ -335,10 +345,22 @@ export interface UseAIChatReturn {
   setThinkingSettings: (settings: ThinkingSettings) => void;
   
   // 操作
-  sendMessage: (content: string) => Promise<void>;
+  // content: 消息文本, images: 可选的图片 base64 数组
+  sendMessage: (content: string, images?: string[]) => Promise<void>;
+  // 添加消息到队列（AI 正在回复时使用）
+  queueMessage: (content: string, images?: string[]) => void;
   stopGeneration: () => void;
   clearMessages: () => Promise<void>;
   createNewSession: () => Promise<void>;
+  // 编辑并重新发送用户消息
+  editAndResend: (messageId: string | number, newContent: string, newImages?: string[]) => Promise<void>;
+  
+  // 待发送消息队列
+  queuedMessages: QueuedMessage[];
+  // 移除队列中的消息
+  removeQueuedMessage: (id: string) => void;
+  // 清空队列
+  clearQueuedMessages: () => void;
   
   // 当前循环状态
   currentLoopCount: number;

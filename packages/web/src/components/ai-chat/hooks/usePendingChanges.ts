@@ -10,6 +10,7 @@ import type {
   FrontendToolContext,
 } from "../types";
 import { applyPendingChange } from "../tools/frontendTools";
+import type { MessageContent } from "../tools/toolResultFormatter";
 
 interface UsePendingChangesOptions {
   toolContext: FrontendToolContext;
@@ -26,7 +27,7 @@ export interface PendingChangesState {
   pendingChangesRef: React.MutableRefObject<PendingChange[]>;
   processedToolResultsRef: React.MutableRefObject<Map<string, string>>;
   pausedStateRef: React.MutableRefObject<{
-    messageHistory: Array<{ role: string; content: string; tool_calls?: any[] }>;
+    messageHistory: Array<{ role: string; content: MessageContent; tool_calls?: any[] }>;
     loopCount: number;
     assistantContent: string;
     toolCalls: ToolCallRecord[];
@@ -54,7 +55,7 @@ export function usePendingChanges(
   
   // 暂存的消息历史和循环计数
   const pausedStateRef = useRef<{
-    messageHistory: Array<{ role: string; content: string; tool_calls?: any[] }>;
+    messageHistory: Array<{ role: string; content: MessageContent; tool_calls?: any[] }>;
     loopCount: number;
     assistantContent: string;
     toolCalls: ToolCallRecord[];

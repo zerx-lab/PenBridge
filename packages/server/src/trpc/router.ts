@@ -15,6 +15,7 @@ import { juejinRouter } from "./routers/juejin.router";
 import { aiConfigRouter } from "./routers/aiConfig.router";
 import { aiChatRouter } from "./routers/aiChat.router";
 import { dataTransferRouter } from "./routers/dataTransfer.router";
+import { copilotAuthRouter } from "./routers/copilotAuth.router";
 
 // 组合所有路由
 export const appRouter = t.router({
@@ -64,6 +65,9 @@ export const appRouter = t.router({
 
   // 数据导入导出
   dataTransfer: dataTransferRouter,
+
+  // GitHub Copilot 认证
+  copilotAuth: copilotAuthRouter,
 });
 
 export type AppRouter = typeof appRouter;

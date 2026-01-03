@@ -2,13 +2,19 @@
  * AI Provider 适配器
  * 
  * 统一抽象不同 AI SDK 的差异，提供一致的接口
- * 支持 @ai-sdk/openai 和 @ai-sdk/openai-compatible 两种 SDK
+ * 支持 @ai-sdk/openai、@ai-sdk/openai-compatible 和 GitHub Copilot
  */
 
 import { createOpenAI } from "@ai-sdk/openai";
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import type { LanguageModel } from "ai";
 import type { AIProvider, AIModel, ModelCapabilities, AISDKType } from "../entities/AIProvider";
+import {
+  type CopilotAuthInfo,
+  getCopilotToken,
+  getCopilotApiBaseUrl,
+  COPILOT_HEADERS,
+} from "./githubCopilotAuth";
 
 /**
  * 推理努力程度 (仅 OpenAI SDK 支持)
@@ -174,9 +180,157 @@ export class OpenAICompatibleAdapter implements AIProviderAdapterInterface {
 }
 
 /**
+ * GitHub Copilot Token 更新回调类型
+ */
+export type CopilotTokenUpdateCallback = (auth: CopilotAuthInfo) => Promise<void>;
+
+/**
+ * GitHub Copilot 适配器
+ * 使用 @ai-sdk/openai-compatible，通过自定义 fetch 注入认证
+ */
+export class GitHubCopilotAdapter implements AIProviderAdapterInterface {
+  readonly sdkType: AISDKType = "github-copilot";
+  
+  private readonly provider: ReturnType<typeof createOpenAICompatible>;
+  private auth: CopilotAuthInfo;
+  private readonly onTokenUpdate?: CopilotTokenUpdateCallback;
+  
+  constructor(config: {
+    auth: CopilotAuthInfo;
+    onTokenUpdate?: CopilotTokenUpdateCallback;
+  }) {
+    this.auth = config.auth;
+    this.onTokenUpdate = config.onTokenUpdate;
+    
+    const baseURL = getCopilotApiBaseUrl(config.auth.enterpriseUrl);
+    
+    this.provider = createOpenAICompatible({
+      name: "github-copilot",
+      baseURL,
+      apiKey: "", // 通过 fetch 注入认证
+      fetch: this.createAuthenticatedFetch() as any,
+    });
+  }
+  
+  /**
+   * 创建带认证的 fetch 函数
+   * 自动处理 token 刷新和请求头注入
+   */
+  private createAuthenticatedFetch() {
+    const self = this;
+    return async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+      // 检查并刷新 token（提前 5 分钟刷新）
+      const now = Date.now();
+      const bufferMs = 5 * 60 * 1000;
+      
+      if (this.auth.expiresAt - now < bufferMs) {
+        try {
+          const newToken = await getCopilotToken(
+            this.auth.refreshToken,
+            this.auth.enterpriseUrl
+          );
+          this.auth = {
+            ...this.auth,
+            accessToken: newToken.token,
+            expiresAt: newToken.expiresAt,
+          };
+          
+          // 通知外部保存新的 token
+          if (this.onTokenUpdate) {
+            await this.onTokenUpdate(this.auth);
+          }
+        } catch (error) {
+          console.error("[GitHubCopilotAdapter] Token 刷新失败:", error);
+          // 继续使用旧 token，可能会失败
+        }
+      }
+      
+      // 构建请求头
+      const headers = new Headers(init?.headers);
+      headers.set("Authorization", `Bearer ${this.auth.accessToken}`);
+      
+      // 注入 Copilot 特定请求头
+      Object.entries(COPILOT_HEADERS).forEach(([key, value]) => {
+        headers.set(key, value);
+      });
+      
+      // 添加额外的 Copilot 请求头
+      headers.set("Openai-Intent", "conversation-edits");
+      headers.set("X-Initiator", "agent");
+      
+      // 检查请求体是否包含图片（视觉请求需要特殊头）
+      if (init?.body) {
+        try {
+          const bodyStr = typeof init.body === "string" ? init.body : "";
+          // 检查是否包含图片数据（多种格式匹配）
+          const hasImage = bodyStr.includes('"type":"image"') || 
+                          bodyStr.includes('"type":"file"') && bodyStr.includes('"mediaType":"image') ||
+                          bodyStr.includes('"image_url"') || 
+                          bodyStr.includes('data:image/') ||
+                          bodyStr.includes('"type": "image"') ||
+                          bodyStr.includes('"type": "file"') && bodyStr.includes('"mediaType": "image');
+          if (hasImage) {
+            headers.set("Copilot-Vision-Request", "true");
+            console.log("[GitHubCopilotAdapter] 检测到图片，添加 Copilot-Vision-Request 头");
+          }
+        } catch {
+          // 忽略解析错误
+        }
+      }
+      
+      return fetch(input, { ...init, headers });
+    };
+  }
+  
+  createModel(modelId: string): LanguageModel {
+    return this.provider(modelId);
+  }
+  
+  /**
+   * GitHub Copilot 不支持原生 reasoning 配置
+   * 经测试验证：Copilot API 忽略 reasoningEffort 和 anthropic.thinking 参数
+   * 深度思考由 Copilot 后端自动控制，用户无法干预
+   */
+  supportsNativeReasoning(): boolean {
+    return false;
+  }
+  
+  supportsVision(capabilities?: ModelCapabilities): boolean {
+    // 默认支持视觉（GPT-4o 等支持）
+    return capabilities?.vision ?? true;
+  }
+  
+  supportsFunctionCalling(capabilities?: ModelCapabilities): boolean {
+    return capabilities?.functionCalling ?? true;
+  }
+  
+  getProviderOptions(_options: ProviderStreamOptions): Record<string, any> {
+    return {};
+  }
+  
+  /**
+   * 获取当前认证信息
+   */
+  getAuth(): CopilotAuthInfo {
+    return this.auth;
+  }
+}
+
+/**
+ * GitHub Copilot 适配器创建选项
+ */
+export interface GitHubCopilotAdapterOptions {
+  auth: CopilotAuthInfo;
+  onTokenUpdate?: CopilotTokenUpdateCallback;
+}
+
+/**
  * 创建 Provider 适配器的工厂函数
  */
-export function createProviderAdapter(provider: AIProvider): AIProviderAdapterInterface {
+export function createProviderAdapter(
+  provider: AIProvider,
+  copilotOptions?: GitHubCopilotAdapterOptions
+): AIProviderAdapterInterface {
   const config = {
     apiKey: provider.apiKey,
     baseURL: provider.baseUrl,
@@ -186,6 +340,11 @@ export function createProviderAdapter(provider: AIProvider): AIProviderAdapterIn
   switch (provider.sdkType) {
     case "openai":
       return new OpenAIAdapter(config);
+    case "github-copilot":
+      if (!copilotOptions) {
+        throw new Error("GitHub Copilot 适配器需要认证信息");
+      }
+      return new GitHubCopilotAdapter(copilotOptions);
     case "openai-compatible":
     default:
       return new OpenAICompatibleAdapter(config);
@@ -197,12 +356,13 @@ export function createProviderAdapter(provider: AIProvider): AIProviderAdapterIn
  */
 export function createAIModelInstance(
   provider: AIProvider,
-  model: AIModel
+  model: AIModel,
+  copilotOptions?: GitHubCopilotAdapterOptions
 ): {
   model: LanguageModel;
   adapter: AIProviderAdapterInterface;
 } {
-  const adapter = createProviderAdapter(provider);
+  const adapter = createProviderAdapter(provider, copilotOptions);
   const modelInstance = adapter.createModel(model.modelId);
   
   return {
