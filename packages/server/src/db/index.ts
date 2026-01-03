@@ -18,7 +18,7 @@ import { dirname, join } from "path";
  * 获取 sql.js WASM 文件路径
  * 
  * 优先级：
- * 1. 可执行文件同目录（Electron 打包环境）
+ * 1. 可执行文件同目录（Electron 打包环境 - Bun 编译的二进制文件）
  * 2. 工作目录（Docker 生产环境）
  * 3. node_modules（开发环境）
  * 
@@ -26,23 +26,34 @@ import { dirname, join } from "path";
  * 因为 Bun 打包后 sql.js 内部的 __dirname 会指向错误的路径
  */
 function getWasmPath(): string {
-  // 1. 检查可执行文件同目录（Electron 打包环境）
-  const execDir = dirname(process.execPath);
-  const bundledWasmPath = join(execDir, "sql-wasm.wasm");
+  // 获取当前脚本/可执行文件所在目录
+  // Bun 编译后，process.argv[0] 就是可执行文件路径
+  const execPath = process.argv[0];
+  const execDir = dirname(execPath);
   
+  // 1. 检查可执行文件同目录（Electron 打包环境 - Bun 编译的二进制文件所在目录）
+  const bundledWasmPath = join(execDir, "sql-wasm.wasm");
   if (existsSync(bundledWasmPath)) {
     console.log(`[DB] Using bundled WASM: ${bundledWasmPath}`);
     return bundledWasmPath;
   }
   
-  // 2. Docker 生产环境：WASM 文件位于工作目录（/app/sql-wasm.wasm）
+  // 2. 也检查 process.execPath 目录（某些情况下可能不同）
+  const execPathDir = dirname(process.execPath);
+  const execPathWasmPath = join(execPathDir, "sql-wasm.wasm");
+  if (existsSync(execPathWasmPath)) {
+    console.log(`[DB] Using WASM from execPath dir: ${execPathWasmPath}`);
+    return execPathWasmPath;
+  }
+  
+  // 3. Docker 生产环境：WASM 文件位于工作目录（/app/sql-wasm.wasm）
   const cwdWasmPath = join(process.cwd(), "sql-wasm.wasm");
   if (existsSync(cwdWasmPath)) {
     console.log(`[DB] Using WASM from working directory: ${cwdWasmPath}`);
     return cwdWasmPath;
   }
   
-  // 3. 开发环境：使用 node_modules 中的 WASM 文件
+  // 4. 开发环境：使用 node_modules 中的 WASM 文件
   // 从当前工作目录向上查找 node_modules
   const nodeModulesWasmPath = join(process.cwd(), "node_modules/sql.js/dist/sql-wasm.wasm");
   if (existsSync(nodeModulesWasmPath)) {
@@ -50,7 +61,7 @@ function getWasmPath(): string {
     return nodeModulesWasmPath;
   }
   
-  // 4. 尝试 packages/server/node_modules（monorepo 开发环境）
+  // 5. 尝试 packages/server/node_modules（monorepo 开发环境）
   const serverNodeModulesWasmPath = join(process.cwd(), "packages/server/node_modules/sql.js/dist/sql-wasm.wasm");
   if (existsSync(serverNodeModulesWasmPath)) {
     console.log(`[DB] Using WASM from server node_modules: ${serverNodeModulesWasmPath}`);
@@ -60,10 +71,11 @@ function getWasmPath(): string {
   // 如果都找不到，抛出错误
   throw new Error(
     `Cannot find sql-wasm.wasm file. Searched locations:\n` +
-    `  - ${bundledWasmPath}\n` +
-    `  - ${cwdWasmPath}\n` +
-    `  - ${nodeModulesWasmPath}\n` +
-    `  - ${serverNodeModulesWasmPath}\n` +
+    `  - ${bundledWasmPath} (exec arg0 dir)\n` +
+    `  - ${execPathWasmPath} (execPath dir)\n` +
+    `  - ${cwdWasmPath} (cwd)\n` +
+    `  - ${nodeModulesWasmPath} (node_modules)\n` +
+    `  - ${serverNodeModulesWasmPath} (server node_modules)\n` +
     `Please ensure sql-wasm.wasm is available in one of these locations.`
   );
 }

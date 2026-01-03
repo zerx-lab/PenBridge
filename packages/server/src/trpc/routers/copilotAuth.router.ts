@@ -6,7 +6,7 @@ import { CopilotAuth } from "../../entities/CopilotAuth";
 import { AIProvider, AIModel } from "../../entities/AIProvider";
 import {
   startDeviceFlowAuth,
-  completeDeviceFlowAuth,
+  pollForTokenOnce,
   getCopilotToken,
   COPILOT_MODELS,
 } from "../../services/githubCopilotAuth";
@@ -104,11 +104,29 @@ export const copilotAuthRouter = t.router({
     }
 
     try {
-      const authInfo = await completeDeviceFlowAuth(
+      console.log(`[Copilot Auth] 开始单次轮询授权状态...`);
+      
+      // 单次轮询检查授权状态
+      const oauthToken = await pollForTokenOnce(
         pendingFlow.deviceCode,
-        pendingFlow.interval,
         pendingFlow.enterpriseUrl
       );
+
+      // 如果返回 null，表示用户尚未授权
+      if (!oauthToken) {
+        console.log(`[Copilot Auth] 用户尚未授权，返回等待状态`);
+        throw new TRPCError({
+          code: "PRECONDITION_FAILED",
+          message: "等待用户授权中...",
+        });
+      }
+
+      console.log(`[Copilot Auth] 成功获取 OAuth token，正在获取 Copilot token...`);
+
+      // 获取 Copilot API token
+      const copilotToken = await getCopilotToken(oauthToken, pendingFlow.enterpriseUrl);
+      
+      console.log(`[Copilot Auth] 成功获取 Copilot token`);
 
       // 清理待处理的流程
       pendingDeviceFlows.delete(1);
@@ -118,16 +136,18 @@ export const copilotAuthRouter = t.router({
       try {
         const userResponse = await fetch("https://api.github.com/user", {
           headers: {
-            Authorization: `Bearer ${authInfo.refreshToken}`,
+            Authorization: `Bearer ${oauthToken}`,
             Accept: "application/json",
           },
         });
         if (userResponse.ok) {
           const userData = await userResponse.json();
           username = userData.login;
+          console.log(`[Copilot Auth] 获取用户名: ${username}`);
         }
       } catch {
         // 获取用户名失败，忽略
+        console.log(`[Copilot Auth] 获取用户名失败，忽略`);
       }
 
       // 保存认证信息到数据库
@@ -136,44 +156,40 @@ export const copilotAuthRouter = t.router({
 
       if (auth) {
         // 更新现有记录
-        auth.refreshToken = authInfo.refreshToken;
-        auth.accessToken = authInfo.accessToken;
-        auth.expiresAt = authInfo.expiresAt;
-        auth.enterpriseUrl = authInfo.enterpriseUrl;
+        auth.refreshToken = oauthToken;
+        auth.accessToken = copilotToken.token;
+        auth.expiresAt = copilotToken.expiresAt;
+        auth.enterpriseUrl = pendingFlow.enterpriseUrl;
         auth.username = username;
       } else {
         // 创建新记录
         auth = repo.create({
           userId: 1,
-          refreshToken: authInfo.refreshToken,
-          accessToken: authInfo.accessToken,
-          expiresAt: authInfo.expiresAt,
-          enterpriseUrl: authInfo.enterpriseUrl,
+          refreshToken: oauthToken,
+          accessToken: copilotToken.token,
+          expiresAt: copilotToken.expiresAt,
+          enterpriseUrl: pendingFlow.enterpriseUrl,
           username,
         });
       }
 
       await repo.save(auth);
+      console.log(`[Copilot Auth] 认证信息已保存到数据库`);
 
       // 自动创建 GitHub Copilot Provider（如果不存在）
-      await ensureCopilotProvider(authInfo.enterpriseUrl);
+      await ensureCopilotProvider(pendingFlow.enterpriseUrl);
 
       return {
         success: true,
         username,
       };
     } catch (error) {
-      // 如果是授权待定错误，重新抛出特殊状态
-      if (
-        error instanceof Error &&
-        error.message.includes("authorization_pending")
-      ) {
-        throw new TRPCError({
-          code: "PRECONDITION_FAILED",
-          message: "等待用户授权中...",
-        });
+      // 如果是 PRECONDITION_FAILED，直接重新抛出
+      if (error instanceof TRPCError && error.code === "PRECONDITION_FAILED") {
+        throw error;
       }
 
+      console.error(`[Copilot Auth] 完成授权失败:`, error);
       throw new TRPCError({
         code: "INTERNAL_SERVER_ERROR",
         message: error instanceof Error ? error.message : "完成授权失败",

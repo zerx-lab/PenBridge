@@ -125,23 +125,22 @@ export async function initiateDeviceFlow(
 }
 
 /**
- * 2. 轮询获取 OAuth access_token
+ * 2. 轮询获取 OAuth access_token（单次轮询）
  *
- * 用户在浏览器中完成授权后，此函数返回 access_token
+ * 返回值：
+ * - 成功时返回 access_token
+ * - 用户尚未授权时返回 null
+ * - 其他错误时抛出异常
  */
-export async function pollForToken(
+export async function pollForTokenOnce(
   deviceCode: string,
-  interval: number,
-  enterpriseUrl?: string,
-  onPolling?: () => void
-): Promise<string> {
+  enterpriseUrl?: string
+): Promise<string | null> {
   const domain = getGitHubDomain(enterpriseUrl);
-  const pollInterval = Math.max(interval, 5) * 1000; // 至少 5 秒
 
-  while (true) {
-    // 通知调用方正在轮询
-    onPolling?.();
+  console.log(`[Copilot Auth] 轮询 GitHub token, domain: ${domain}, deviceCode: ${deviceCode.substring(0, 8)}...`);
 
+  try {
     const response = await fetch(
       `https://${domain}/login/oauth/access_token`,
       {
@@ -158,32 +157,36 @@ export async function pollForToken(
       }
     );
 
+    console.log(`[Copilot Auth] GitHub 响应状态: ${response.status}`);
+
     if (!response.ok) {
       const errorText = await response.text();
+      console.error(`[Copilot Auth] 请求失败: ${response.status} - ${errorText}`);
       throw new Error(`Token 轮询请求失败: ${response.status} - ${errorText}`);
     }
 
-    const data: TokenPollingResponse = await response.json();
+    const responseText = await response.text();
+    console.log(`[Copilot Auth] GitHub 原始响应: ${responseText}`);
+    
+    const data: TokenPollingResponse = JSON.parse(responseText);
 
     // 成功获取 token
     if (data.access_token) {
+      console.log(`[Copilot Auth] ✅ 成功获取 access_token: ${data.access_token.substring(0, 10)}...`);
       return data.access_token;
     }
 
     // 处理错误
     if (data.error) {
+      console.log(`[Copilot Auth] GitHub 返回错误: ${data.error} - ${data.error_description || ''}`);
       switch (data.error) {
         case "authorization_pending":
-          // 用户尚未授权，继续轮询
-          await new Promise((resolve) => setTimeout(resolve, pollInterval));
-          continue;
+          // 用户尚未授权，返回 null 表示需要继续等待
+          return null;
 
         case "slow_down":
-          // 需要降低轮询频率
-          await new Promise((resolve) =>
-            setTimeout(resolve, pollInterval + 5000)
-          );
-          continue;
+          // 需要降低轮询频率，返回 null
+          return null;
 
         case "expired_token":
           throw new Error("设备码已过期，请重新开始授权");
@@ -196,7 +199,39 @@ export async function pollForToken(
       }
     }
 
-    // 未知响应，等待后重试
+    // 未知响应
+    console.log(`[Copilot Auth] 未知响应格式`);
+    return null;
+  } catch (error) {
+    console.error(`[Copilot Auth] 轮询异常:`, error);
+    throw error;
+  }
+}
+
+/**
+ * 2. 轮询获取 OAuth access_token（持续轮询，用于非交互式场景）
+ *
+ * 用户在浏览器中完成授权后，此函数返回 access_token
+ */
+export async function pollForToken(
+  deviceCode: string,
+  interval: number,
+  enterpriseUrl?: string,
+  onPolling?: () => void
+): Promise<string> {
+  const pollInterval = Math.max(interval, 5) * 1000; // 至少 5 秒
+
+  while (true) {
+    // 通知调用方正在轮询
+    onPolling?.();
+
+    const token = await pollForTokenOnce(deviceCode, enterpriseUrl);
+    
+    if (token) {
+      return token;
+    }
+
+    // 等待后继续轮询
     await new Promise((resolve) => setTimeout(resolve, pollInterval));
   }
 }
@@ -210,35 +245,43 @@ export async function getCopilotToken(
   refreshToken: string,
   enterpriseUrl?: string
 ): Promise<{ token: string; expiresAt: number }> {
-  const domain = getGitHubDomain(enterpriseUrl);
   const apiDomain = enterpriseUrl ? `api.${normalizeDomain(enterpriseUrl)}` : "api.github.com";
+  const url = `https://${apiDomain}/copilot_internal/v2/token`;
 
-  const response = await fetch(
-    `https://${apiDomain}/copilot_internal/v2/token`,
-    {
+  console.log(`[Copilot Auth] 获取 Copilot token, URL: ${url}`);
+
+  try {
+    const response = await fetch(url, {
       headers: {
         Accept: "application/json",
         Authorization: `Bearer ${refreshToken}`,
         ...COPILOT_HEADERS,
       },
-    }
-  );
+    });
 
-  if (!response.ok) {
-    const errorText = await response.text();
-    if (response.status === 401) {
-      throw new Error("GitHub 授权已过期，请重新登录");
+    console.log(`[Copilot Auth] Copilot token 响应状态: ${response.status}`);
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error(`[Copilot Auth] 获取 Copilot token 失败: ${response.status} - ${errorText}`);
+      if (response.status === 401) {
+        throw new Error("GitHub 授权已过期，请重新登录");
+      }
+      throw new Error(`获取 Copilot Token 失败: ${response.status} - ${errorText}`);
     }
-    throw new Error(`获取 Copilot Token 失败: ${response.status} - ${errorText}`);
+
+    const data: CopilotTokenResponse = await response.json();
+    console.log(`[Copilot Auth] ✅ 成功获取 Copilot token, expires_at: ${data.expires_at}`);
+
+    return {
+      token: data.token,
+      // expires_at 是秒级时间戳，转换为毫秒
+      expiresAt: data.expires_at * 1000,
+    };
+  } catch (error) {
+    console.error(`[Copilot Auth] 获取 Copilot token 异常:`, error);
+    throw error;
   }
-
-  const data: CopilotTokenResponse = await response.json();
-
-  return {
-    token: data.token,
-    // expires_at 是秒级时间戳，转换为毫秒
-    expiresAt: data.expires_at * 1000,
-  };
 }
 
 /**
