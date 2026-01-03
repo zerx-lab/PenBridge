@@ -36,6 +36,13 @@ function EditArticlePage() {
   const [juejinIsOriginal, setJuejinIsOriginal] = useState<number>(1);
   const [juejinStatus, setJuejinStatus] = useState<string>("");
   const [juejinArticleUrl, setJuejinArticleUrl] = useState<string>("");
+  // CSDN 相关状态
+  const [csdnTags, setCsdnTags] = useState<string[]>([]);
+  const [csdnDescription, setCsdnDescription] = useState<string>("");
+  const [csdnType, setCsdnType] = useState<string>("original");
+  const [csdnReadType, setCsdnReadType] = useState<string>("public");
+  const [csdnStatus, setCsdnStatus] = useState<string>("");
+  const [csdnArticleUrl, setCsdnArticleUrl] = useState<string>("");
   const trpcUtils = trpc.useContext();
 
   // 用于跟踪是否为初始加载（避免初始加载时触发保存）
@@ -222,6 +229,13 @@ function EditArticlePage() {
       setJuejinIsOriginal((articleMeta as any).juejinIsOriginal ?? 1);
       setJuejinStatus((articleMeta as any).juejinStatus || "");
       setJuejinArticleUrl((articleMeta as any).juejinArticleUrl || "");
+      // CSDN 相关
+      setCsdnTags((articleMeta as any).csdnTags || []);
+      setCsdnDescription((articleMeta as any).csdnDescription || "");
+      setCsdnType((articleMeta as any).csdnType || "original");
+      setCsdnReadType((articleMeta as any).csdnReadType || "public");
+      setCsdnStatus((articleMeta as any).csdnStatus || "");
+      setCsdnArticleUrl((articleMeta as any).csdnArticleUrl || "");
 
       if (isNewArticle) {
         loadedArticleIdRef.current = articleMeta.id;
@@ -379,6 +393,8 @@ function EditArticlePage() {
           <PublishMenu
             articleId={Number(id)}
             articleStatus={article.status}
+            articleTitle={title}
+            articleContent={content}
             tencentArticleUrl={article.tencentArticleUrl}
             tencentTagIds={tencentTagIds}
             sourceType={sourceType}
@@ -391,6 +407,13 @@ function EditArticlePage() {
             juejinBriefContent={juejinBriefContent}
             juejinIsOriginal={juejinIsOriginal}
             juejinStatus={juejinStatus}
+            // CSDN 相关
+            csdnArticleUrl={csdnArticleUrl}
+            csdnTags={csdnTags}
+            csdnDescription={csdnDescription}
+            csdnType={csdnType}
+            csdnReadType={csdnReadType}
+            csdnStatus={csdnStatus}
             variant="button"
           />
         </>

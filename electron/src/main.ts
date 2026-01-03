@@ -2,6 +2,7 @@ import { app, BrowserWindow, ipcMain, session, Menu, globalShortcut, shell } fro
 import * as path from "path";
 import { TencentAuth } from "./auth/tencentAuth";
 import { JuejinAuth } from "./auth/juejinAuth";
+import { CsdnAuth } from "./auth/csdnAuth";
 import { registerCopilotAuthHandlers } from "./auth/copilotAuth";
 import { createStore, AppMode } from "./store";
 import { initAutoUpdater } from "./autoUpdater";
@@ -25,6 +26,9 @@ const tencentAuth = new TencentAuth(store);
 
 // 掘金认证模块
 const juejinAuth = new JuejinAuth(store);
+
+// CSDN 认证模块
+const csdnAuth = new CsdnAuth(store);
 
 // 前端开发服务器地址（仅开发环境使用）
 const WEB_URL = process.env.WEB_URL || "http://localhost:5173";
@@ -512,10 +516,72 @@ function registerJuejinAuthHandlers() {
   });
 }
 
+// 注册 CSDN IPC 处理器
+function registerCsdnAuthHandlers() {
+  // 获取登录状态
+  ipcMain.handle("csdnAuth:status", async () => {
+    return csdnAuth.getLoginStatus();
+  });
+
+  // 打开登录窗口
+  ipcMain.handle("csdnAuth:login", async () => {
+    return csdnAuth.openLoginWindow(mainWindow);
+  });
+
+  // 登出
+  ipcMain.handle("csdnAuth:logout", async () => {
+    return csdnAuth.logout();
+  });
+
+  // 获取 cookies（用于发送给后端）
+  ipcMain.handle("csdnAuth:getCookies", async () => {
+    return csdnAuth.getCookies();
+  });
+
+  // 同步 cookies 到后端
+  ipcMain.handle("csdnAuth:syncToServer", async () => {
+    const cookies = csdnAuth.getCookies();
+    if (!cookies) {
+      return { success: false, message: "未登录" };
+    }
+
+    const serverUrl = getServerUrl();
+    if (!serverUrl) {
+      return { success: false, message: "服务器地址未配置，请先在设置中配置服务器地址" };
+    }
+
+    try {
+      // 使用 tRPC 批处理格式
+      const response = await fetch(`${serverUrl}/trpc/csdnAuth.setCookies`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          cookies: cookies,
+        }),
+      });
+      const result = await response.json();
+
+      // tRPC 响应格式处理
+      if (result.result?.data) {
+        return result.result.data;
+      }
+      return result;
+    } catch (error) {
+      return {
+        success: false,
+        message: error instanceof Error ? error.message : "同步失败",
+      };
+    }
+  });
+}
+
 // 注册 IPC 处理器
 function registerIpcHandlers() {
   registerTencentAuthHandlers();
   registerJuejinAuthHandlers();
+  registerCsdnAuthHandlers();
   registerCopilotAuthHandlers();
 }
 

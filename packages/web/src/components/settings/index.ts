@@ -1,6 +1,7 @@
 // 设置组件导出
 export { TencentAuthSettings } from "./TencentAuthSettings";
 export { JuejinAuthSettings } from "./JuejinAuthSettings";
+export { CsdnAuthSettings } from "./CsdnAuthSettings";
 export { EmailNotificationSettings } from "./EmailNotificationSettings";
 export { ScheduleTaskSettings } from "./ScheduleTaskSettings";
 export { UserManagementSettings } from "./UserManagementSettings";

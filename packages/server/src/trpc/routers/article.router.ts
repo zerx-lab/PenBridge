@@ -82,6 +82,15 @@ export const articleRouter = t.router({
           "juejinIsOriginal",
           "juejinStatus",
           "juejinLastSyncedAt",
+          // CSDN 相关字段
+          "csdnArticleId",
+          "csdnArticleUrl",
+          "csdnTags",
+          "csdnDescription",
+          "csdnType",
+          "csdnReadType",
+          "csdnStatus",
+          "csdnLastSyncedAt",
         ],
       });
     }),

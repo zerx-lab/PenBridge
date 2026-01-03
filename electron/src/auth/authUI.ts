@@ -31,9 +31,12 @@ export const PLATFORM_THEMES: Record<string, PlatformTheme> = {
     secondaryColor: "#764ba2",
     buttonTextColor: "#667eea",
   },
-  // 后续可以添加更多平台
-  // csdn: { ... },
-  // zhihu: { ... },
+  csdn: {
+    name: "CSDN",
+    primaryColor: "#fc5531",
+    secondaryColor: "#ff7849",
+    buttonTextColor: "#fc5531",
+  },
 };
 
 /**

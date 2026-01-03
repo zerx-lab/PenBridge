@@ -49,6 +49,25 @@ export class User {
   @Column({ nullable: true })
   juejinLastLoginAt?: Date; // 掘金最后登录时间
 
+  // ==================== CSDN 相关字段 ====================
+  @Column({ nullable: true })
+  csdnUserId?: string; // CSDN 用户 ID
+
+  @Column({ nullable: true })
+  csdnNickname?: string; // CSDN 昵称
+
+  @Column({ nullable: true })
+  csdnAvatarUrl?: string; // CSDN 头像
+
+  @Column({ type: "text", nullable: true })
+  csdnCookies?: string; // 存储 CSDN 的登录 cookies
+
+  @Column({ default: false })
+  csdnLoggedIn!: boolean; // CSDN 登录状态
+
+  @Column({ nullable: true })
+  csdnLastLoginAt?: Date; // CSDN 最后登录时间
+
   // ==================== 通用字段 ====================
   @CreateDateColumn()
   createdAt!: Date;

@@ -80,6 +80,24 @@ contextBridge.exposeInMainWorld("electronAPI", {
     syncToServer: () => ipcRenderer.invoke("juejinAuth:syncToServer"),
   },
 
+  // CSDN 认证相关
+  csdnAuth: {
+    // 获取登录状态
+    getStatus: () => ipcRenderer.invoke("csdnAuth:status"),
+
+    // 打开登录窗口
+    login: () => ipcRenderer.invoke("csdnAuth:login"),
+
+    // 登出
+    logout: () => ipcRenderer.invoke("csdnAuth:logout"),
+
+    // 获取 cookies
+    getCookies: () => ipcRenderer.invoke("csdnAuth:getCookies"),
+
+    // 同步到服务器
+    syncToServer: () => ipcRenderer.invoke("csdnAuth:syncToServer"),
+  },
+
   // GitHub Copilot 认证辅助（主要逻辑在后端）
   copilotAuth: {
     // 打开 GitHub 设备授权页面
@@ -183,6 +201,20 @@ declare global {
         syncToServer: () => Promise<{ success: boolean; message?: string }>;
       };
       juejinAuth: {
+        getStatus: () => Promise<{
+          isLoggedIn: boolean;
+          user?: { nickname?: string; avatarUrl?: string; userId?: string };
+        }>;
+        login: () => Promise<{
+          success: boolean;
+          message: string;
+          user?: { nickname?: string; avatarUrl?: string; userId?: string };
+        }>;
+        logout: () => Promise<{ success: boolean }>;
+        getCookies: () => Promise<string | null>;
+        syncToServer: () => Promise<{ success: boolean; message?: string }>;
+      };
+      csdnAuth: {
         getStatus: () => Promise<{
           isLoggedIn: boolean;
           user?: { nickname?: string; avatarUrl?: string; userId?: string };

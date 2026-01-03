@@ -136,7 +136,8 @@ export const copilotAuthRouter = t.router({
       try {
         const userResponse = await fetch("https://api.github.com/user", {
           headers: {
-            Authorization: `Bearer ${oauthToken}`,
+            // GitHub API 要求使用 "token" 前缀
+            Authorization: `token ${oauthToken}`,
             Accept: "application/json",
           },
         });

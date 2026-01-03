@@ -9,12 +9,14 @@ import {
   Calendar,
   Edit,
   Flame,
+  Code2,
 } from "lucide-react";
 import { trpc } from "@/utils/trpc";
 import TencentPublishDialog from "./TencentPublishDialog";
 import SchedulePublishDialog from "./SchedulePublishDialog";
 import JuejinPublishDialog from "./JuejinPublishDialog";
 import JuejinSchedulePublishDialog from "./JuejinSchedulePublishDialog";
+import CsdnPublishDialog from "./CsdnPublishDialog";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -35,6 +37,8 @@ import {
 interface PublishMenuProps {
   articleId: number;
   articleStatus: string;
+  articleTitle?: string;  // 文章标题（用于 CSDN 推荐标签）
+  articleContent?: string;  // 文章内容（用于 CSDN 推荐标签）
   tencentArticleUrl?: string;
   tencentTagIds?: number[];
   sourceType?: number;
@@ -49,6 +53,13 @@ interface PublishMenuProps {
   juejinIsOriginal?: number;
   juejinStatus?: string;
   juejinScheduledAt?: string;  // 掘金定时发布时间
+  // CSDN 相关
+  csdnArticleUrl?: string;
+  csdnTags?: string[];
+  csdnDescription?: string;
+  csdnType?: string;
+  csdnReadType?: string;
+  csdnStatus?: string;
   onSuccess?: () => void;
   /** 显示模式：button 显示完整按钮，icon 只显示图标 */
   variant?: "button" | "icon";
@@ -63,6 +74,8 @@ interface PublishMenuProps {
 export function PublishMenu({
   articleId,
   articleStatus,
+  articleTitle = "",
+  articleContent = "",
   tencentArticleUrl,
   tencentTagIds = [],
   sourceType = 1,
@@ -77,6 +90,13 @@ export function PublishMenu({
   juejinIsOriginal = 1,
   juejinStatus,
   juejinScheduledAt,
+  // CSDN 相关
+  csdnArticleUrl,
+  csdnTags = [],
+  csdnDescription = "",
+  csdnType = "original",
+  csdnReadType = "public",
+  csdnStatus,
   onSuccess,
   variant = "button",
   disabled = false,
@@ -85,6 +105,7 @@ export function PublishMenu({
   const [scheduleDialogOpen, setScheduleDialogOpen] = useState(false);
   const [juejinPublishDialogOpen, setJuejinPublishDialogOpen] = useState(false);
   const [juejinScheduleDialogOpen, setJuejinScheduleDialogOpen] = useState(false);
+  const [csdnPublishDialogOpen, setCsdnPublishDialogOpen] = useState(false);
 
   // 获取文章的腾讯云定时任务
   const { data: existingTask } = trpc.schedule.getByArticle.useQuery(
@@ -146,6 +167,16 @@ export function PublishMenu({
     }
   };
 
+  const handleViewCsdnArticle = () => {
+    if (csdnArticleUrl) {
+      if (window.electronAPI?.shell?.openExternal) {
+        window.electronAPI.shell.openExternal(csdnArticleUrl);
+      } else {
+        window.open(csdnArticleUrl, "_blank");
+      }
+    }
+  };
+
   // 判断文章状态
   const isPublished = articleStatus === "published";
   const isPending = articleStatus === "pending";
@@ -156,6 +187,9 @@ export function PublishMenu({
 
   // 掘金状态判断
   const canPublishJuejin = !juejinStatus || juejinStatus === "draft" || juejinStatus === "failed";
+
+  // CSDN 状态判断
+  const canPublishCsdn = !csdnStatus || csdnStatus === "draft" || csdnStatus === "failed";
 
   // 格式化定时发布时间
   const formatScheduledTime = (time: string) => {
@@ -309,10 +343,41 @@ export function PublishMenu({
 
           <DropdownMenuSeparator />
 
-          {/* CSDN（敬请期待） */}
-          <DropdownMenuItem disabled>
-            CSDN（敬请期待）
-          </DropdownMenuItem>
+          {/* CSDN 子菜单 */}
+          <DropdownMenuSub>
+            <DropdownMenuSubTrigger>
+              <Code2 className="size-4" />
+              CSDN
+            </DropdownMenuSubTrigger>
+            <DropdownMenuSubContent>
+              {canPublishCsdn && (
+                <DropdownMenuItem onClick={() => setCsdnPublishDialogOpen(true)}>
+                  <CloudUpload className="size-4" />
+                  立即发布
+                </DropdownMenuItem>
+              )}
+
+              {csdnStatus === "pending" && (
+                <DropdownMenuItem disabled>
+                  <Clock className="size-4" />
+                  审核中...
+                </DropdownMenuItem>
+              )}
+
+              {csdnStatus === "published" && csdnArticleUrl && (
+                <DropdownMenuItem onClick={handleViewCsdnArticle}>
+                  <ExternalLink className="size-4" />
+                  查看文章
+                </DropdownMenuItem>
+              )}
+
+              {csdnStatus === "published" && !csdnArticleUrl && (
+                <DropdownMenuItem disabled>
+                  <span className="text-muted-foreground">已发布</span>
+                </DropdownMenuItem>
+              )}
+            </DropdownMenuSubContent>
+          </DropdownMenuSub>
         </DropdownMenuContent>
       </DropdownMenu>
 
@@ -378,6 +443,22 @@ export function PublishMenu({
             scheduledAt: existingJuejinTask.scheduledAt as unknown as string,
             config: existingJuejinTask.config as any,
           } : null}
+          onSuccess={onSuccess}
+        />
+      )}
+
+      {/* CSDN 发布配置弹窗 - 条件渲染 */}
+      {csdnPublishDialogOpen && (
+        <CsdnPublishDialog
+          open={csdnPublishDialogOpen}
+          onOpenChange={setCsdnPublishDialogOpen}
+          articleId={articleId}
+          articleTitle={articleTitle}
+          articleContent={articleContent}
+          csdnTags={csdnTags}
+          csdnDescription={csdnDescription}
+          csdnType={csdnType}
+          csdnReadType={csdnReadType}
           onSuccess={onSuccess}
         />
       )}

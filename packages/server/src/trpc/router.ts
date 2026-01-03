@@ -5,6 +5,7 @@ import { adminAuthRouter } from "./routers/adminAuth.router";
 import { adminUserRouter } from "./routers/adminUser.router";
 import { authRouter } from "./routers/auth.router";
 import { juejinAuthRouter } from "./routers/juejinAuth.router";
+import { csdnAuthRouter } from "./routers/csdnAuth.router";
 import { articleRouter } from "./routers/article.router";
 import { syncRouter } from "./routers/sync.router";
 import { folderRouter } from "./routers/folder.router";
@@ -12,6 +13,7 @@ import { articleExtRouter } from "./routers/articleExt.router";
 import { scheduleRouter } from "./routers/schedule.router";
 import { emailConfigRouter } from "./routers/emailConfig.router";
 import { juejinRouter } from "./routers/juejin.router";
+import { csdnRouter } from "./routers/csdn.router";
 import { aiConfigRouter } from "./routers/aiConfig.router";
 import { aiChatRouter } from "./routers/aiChat.router";
 import { dataTransferRouter } from "./routers/dataTransfer.router";
@@ -36,6 +38,9 @@ export const appRouter = t.router({
   // 掘金认证相关
   juejinAuth: juejinAuthRouter,
 
+  // CSDN 认证相关
+  csdnAuth: csdnAuthRouter,
+
   // 文章相关
   article: articleRouter,
 
@@ -56,6 +61,9 @@ export const appRouter = t.router({
 
   // 掘金相关
   juejin: juejinRouter,
+
+  // CSDN 相关
+  csdn: csdnRouter,
 
   // AI 配置相关
   aiConfig: aiConfigRouter,

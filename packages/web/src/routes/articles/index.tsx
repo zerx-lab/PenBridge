@@ -8,6 +8,7 @@ import {
   Cloud,
   Loader2,
   Sparkles,
+  Code2,
 } from "lucide-react";
 import { notification } from "antd";
 import { cn } from "@/lib/utils";
@@ -76,19 +77,26 @@ function ArticlesPage() {
   // 同步掘金文章状态（不自动显示通知）
   const syncJuejinMutation = trpc.juejin.syncArticleStatus.useMutation();
 
+  // 同步 CSDN 文章状态（不自动显示通知）
+  const syncCsdnMutation = trpc.csdn.syncArticleStatus.useMutation();
+
   // 同步所有平台状态，合并结果在一个通知中展示
   const handleSyncAll = async () => {
     setIsSyncing(true);
     const results: SyncResult[] = [];
 
-    // 串行调用两个平台的同步，避免并发写入冲突
-    // 先同步腾讯云，再同步掘金
+    // 串行调用三个平台的同步，避免并发写入冲突
+    // 先同步腾讯云，再同步掘金，最后同步 CSDN
     const tencentResult = await Promise.allSettled([
       syncTencentMutation.mutateAsync(),
     ]).then(r => r[0]);
     
     const juejinResult = await Promise.allSettled([
       syncJuejinMutation.mutateAsync(),
+    ]).then(r => r[0]);
+
+    const csdnResult = await Promise.allSettled([
+      syncCsdnMutation.mutateAsync(),
     ]).then(r => r[0]);
 
     // 处理腾讯云同步结果
@@ -100,11 +108,15 @@ function ArticlesPage() {
         message: result.message,
       });
     } else {
-      results.push({
-        platform: "腾讯云社区",
-        success: false,
-        message: (tencentResult.reason as any)?.message || "同步时发生错误",
-      });
+      const errorMessage = (tencentResult.reason as any)?.message || "同步时发生错误";
+      // 未登录时不显示错误
+      if (!errorMessage.includes("登录")) {
+        results.push({
+          platform: "腾讯云社区",
+          success: false,
+          message: errorMessage,
+        });
+      }
     }
 
     // 处理掘金同步结果
@@ -117,10 +129,30 @@ function ArticlesPage() {
       });
     } else {
       const errorMessage = (juejinResult.reason as any)?.message || "同步时发生错误";
-      // 未登录掘金时不显示错误
+      // 未登录时不显示错误
       if (!errorMessage.includes("登录")) {
         results.push({
           platform: "掘金",
+          success: false,
+          message: errorMessage,
+        });
+      }
+    }
+
+    // 处理 CSDN 同步结果
+    if (csdnResult.status === "fulfilled") {
+      const result = csdnResult.value as any;
+      results.push({
+        platform: "CSDN",
+        success: result.success,
+        message: result.message,
+      });
+    } else {
+      const errorMessage = (csdnResult.reason as any)?.message || "同步时发生错误";
+      // 未登录时不显示错误
+      if (!errorMessage.includes("登录")) {
+        results.push({
+          platform: "CSDN",
           success: false,
           message: errorMessage,
         });
@@ -143,6 +175,7 @@ function ArticlesPage() {
       const platformIcons: Record<string, React.ReactNode> = {
         "腾讯云社区": <Cloud className="h-4 w-4" />,
         "掘金": <Sparkles className="h-4 w-4" />,
+        "CSDN": <Code2 className="h-4 w-4" />,
       };
 
       notification.open({
@@ -188,7 +221,10 @@ function ArticlesPage() {
     const needsJuejinSync = data?.articles?.some(
       (a: any) => a.juejinStatus === "pending" || a.juejinArticleId
     );
-    if (needsTencentSync || needsJuejinSync) {
+    const needsCsdnSync = data?.articles?.some(
+      (a: any) => a.csdnStatus === "pending" || a.csdnArticleId
+    );
+    if (needsTencentSync || needsJuejinSync || needsCsdnSync) {
       hasSyncedRef.current = true;
       handleSyncAll();
     }
@@ -281,7 +317,13 @@ function ArticlesPage() {
                 return (
                   <TableRow key={article.id}>
                     <TableCell className="font-medium">
-                      {article.title || "无标题"}
+                      <Link
+                        to="/articles/$id/edit"
+                        params={{ id: String(article.id) }}
+                        className="hover:text-primary hover:underline cursor-pointer"
+                      >
+                        {article.title || "无标题"}
+                      </Link>
                     </TableCell>
                     {/* 平台列 - 显示所有平台，通过颜色区分发布状态 */}
                     <TableCell>
@@ -362,6 +404,49 @@ function ArticlesPage() {
                                 >
                                   <Sparkles className="h-3 w-3" />
                                   掘金
+                                </Badge>
+                              </TooltipTrigger>
+                              <TooltipContent>{tooltipText}</TooltipContent>
+                            </Tooltip>
+                          );
+                        })()}
+                        {/* CSDN平台徽章 */}
+                        {(() => {
+                          const hasCsdnId = !!article.csdnArticleId;
+                          const csdnStatus = article.csdnStatus;
+
+                          let badgeClass = "bg-gray-100 text-gray-400";
+                          let tooltipText = "未发布";
+
+                          // 只有当有 CSDN 文章 ID 时才根据状态显示不同颜色
+                          if (hasCsdnId) {
+                            if (csdnStatus === "published") {
+                              badgeClass = "bg-green-100 text-green-700 border border-green-300";
+                              tooltipText = "已发布";
+                            } else if (csdnStatus === "pending") {
+                              badgeClass = "bg-yellow-100 text-yellow-700 border border-yellow-300";
+                              tooltipText = "审核中";
+                            } else if (csdnStatus === "rejected") {
+                              badgeClass = "bg-red-100 text-red-600 border border-red-300";
+                              tooltipText = "未通过审核";
+                            } else if (csdnStatus === "failed") {
+                              badgeClass = "bg-red-100 text-red-600 border border-red-300";
+                              tooltipText = "发布失败";
+                            } else if (csdnStatus === "draft") {
+                              badgeClass = "bg-blue-100 text-blue-700 border border-blue-300";
+                              tooltipText = "草稿";
+                            }
+                          }
+
+                          return (
+                            <Tooltip>
+                              <TooltipTrigger>
+                                <Badge
+                                  variant="secondary"
+                                  className={cn("text-xs gap-1", badgeClass)}
+                                >
+                                  <Code2 className="h-3 w-3" />
+                                  CSDN
                                 </Badge>
                               </TooltipTrigger>
                               <TooltipContent>{tooltipText}</TooltipContent>

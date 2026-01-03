@@ -8,6 +8,17 @@
 // GitHub Copilot Chat 的 OAuth Client ID（公开）
 export const COPILOT_CLIENT_ID = "Iv1.b507a08c87ecfe98";
 
+/**
+ * Copilot OAuth 认证过期错误
+ * 当 OAuth refresh_token 失效时抛出，需要用户重新授权
+ */
+export class CopilotAuthExpiredError extends Error {
+  constructor(message: string = "GitHub Copilot 授权已过期，请重新连接") {
+    super(message);
+    this.name = "CopilotAuthExpiredError";
+  }
+}
+
 // Copilot 请求头（模拟 VS Code Copilot 扩展）
 export const COPILOT_HEADERS = {
   "User-Agent": "GitHubCopilotChat/0.32.4",
@@ -102,26 +113,39 @@ export async function initiateDeviceFlow(
   enterpriseUrl?: string
 ): Promise<DeviceFlowResponse> {
   const domain = getGitHubDomain(enterpriseUrl);
+  const url = `https://${domain}/login/device/code`;
 
-  const response = await fetch(`https://${domain}/login/device/code`, {
-    method: "POST",
-    headers: {
-      Accept: "application/json",
-      "Content-Type": "application/json",
-      ...COPILOT_HEADERS,
-    },
-    body: JSON.stringify({
-      client_id: COPILOT_CLIENT_ID,
-      scope: "read:user",
-    }),
-  });
+  console.log(`[Copilot Auth] 启动设备授权流程, URL: ${url}`);
 
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`启动设备授权失败: ${response.status} - ${errorText}`);
+  try {
+    const response = await fetch(url, {
+      method: "POST",
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json",
+        ...COPILOT_HEADERS,
+      },
+      body: JSON.stringify({
+        client_id: COPILOT_CLIENT_ID,
+        scope: "read:user",
+      }),
+    });
+
+    console.log(`[Copilot Auth] 设备授权响应状态: ${response.status}`);
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error(`[Copilot Auth] 启动设备授权失败: ${response.status} - ${errorText}`);
+      throw new Error(`启动设备授权失败: ${response.status} - ${errorText}`);
+    }
+
+    const data = await response.json();
+    console.log(`[Copilot Auth] ✅ 成功获取 device_code, user_code: ${data.user_code}`);
+    return data;
+  } catch (error) {
+    console.error(`[Copilot Auth] 启动设备授权异常:`, error);
+    throw error;
   }
-
-  return response.json();
 }
 
 /**
@@ -254,7 +278,8 @@ export async function getCopilotToken(
     const response = await fetch(url, {
       headers: {
         Accept: "application/json",
-        Authorization: `Bearer ${refreshToken}`,
+        // GitHub API 要求使用 "token" 前缀，而不是 "Bearer"
+        Authorization: `token ${refreshToken}`,
         ...COPILOT_HEADERS,
       },
     });

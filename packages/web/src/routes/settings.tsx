@@ -1,7 +1,7 @@
 import { createFileRoute, useNavigate, useSearch } from "@tanstack/react-router";
 import { useState } from "react";
 import { z } from "zod";
-import { Cloud, Info, Mail, Calendar, Users, Key, Server, PenLine, Sparkles, Bot, Database, ChevronRight } from "lucide-react";
+import { Cloud, Info, Mail, Calendar, Users, Key, Server, PenLine, Sparkles, Bot, Database, ChevronRight, FileCode } from "lucide-react";
 import { isSuperAdmin } from "@/utils/auth";
 import { cn } from "@/lib/utils";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -13,6 +13,7 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import {
   TencentAuthSettings,
   JuejinAuthSettings,
+  CsdnAuthSettings,
   EmailNotificationSettings,
   ScheduleTaskSettings,
   UserManagementSettings,
@@ -35,6 +36,7 @@ const getSettingsMenu = (): MenuGroup[] => {
       items: [
         { id: "tencent", icon: Cloud, label: "腾讯云社区" },
         { id: "juejin", icon: Sparkles, label: "掘金" },
+        { id: "csdn", icon: FileCode, label: "CSDN" },
       ],
     },
     {
@@ -92,7 +94,7 @@ function SettingsPage() {
   const handleTabChange = (tabId: string) => {
     navigate({
       to: "/settings",
-      search: { tab: tabId as "server" | "tencent" | "juejin" | "email" | "schedule" | "users" | "account" | "editor" | "about" | "ai" | "data" },
+      search: { tab: tabId as "server" | "tencent" | "juejin" | "csdn" | "email" | "schedule" | "users" | "account" | "editor" | "about" | "ai" | "data" },
       replace: true,
     });
     // 移动端选择后关闭菜单
@@ -193,6 +195,7 @@ function SettingsPage() {
           {activeTab === "server" && <ServerConfigSettings />}
           {activeTab === "tencent" && <TencentAuthSettings />}
           {activeTab === "juejin" && <JuejinAuthSettings />}
+          {activeTab === "csdn" && <CsdnAuthSettings />}
           {activeTab === "email" && <EmailNotificationSettings />}
           {activeTab === "schedule" && <ScheduleTaskSettings />}
           {activeTab === "users" && isSuperAdmin() && <UserManagementSettings />}
@@ -209,7 +212,7 @@ function SettingsPage() {
 
 // 定义 search params 的验证 schema
 const settingsSearchSchema = z.object({
-  tab: z.enum(["server", "tencent", "juejin", "email", "schedule", "users", "account", "editor", "about", "ai", "data"]).optional().catch("tencent"),
+  tab: z.enum(["server", "tencent", "juejin", "csdn", "email", "schedule", "users", "account", "editor", "about", "ai", "data"]).optional().catch("tencent"),
 });
 
 export const Route = createFileRoute("/settings")({

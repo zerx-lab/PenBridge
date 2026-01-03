@@ -7,6 +7,7 @@ import * as fs from "fs";
 import * as path from "path";
 import { TencentApiClient } from "./tencentApi";
 import { JuejinApiClient } from "./juejinApi";
+import { CsdnApiClient } from "./csdnApi";
 
 /**
  * 图片上传客户端接口
@@ -25,7 +26,7 @@ export interface ImageUploadClient {
 /**
  * 支持的平台类型
  */
-export type PlatformType = "tencent" | "juejin";
+export type PlatformType = "tencent" | "juejin" | "csdn";
 
 // 调试日志开关
 const DEBUG = true;
@@ -106,6 +107,11 @@ const PLATFORM_IMAGE_DOMAINS: Record<PlatformType, string[]> = {
     "byteimg.com",
     "snssdk.com",
     "bytedanceapi.com",
+  ],
+  csdn: [
+    "csdnimg.cn",
+    "csdn.net",
+    "obs.cn-north-4.myhuaweicloud.com",
   ],
 };
 

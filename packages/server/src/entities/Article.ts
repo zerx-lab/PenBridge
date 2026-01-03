@@ -98,6 +98,34 @@ export class Article {
   @Column({ nullable: true })
   juejinLastSyncedAt?: Date; // 最后同步到掘金的时间
 
+  // CSDN 相关字段
+  @Column({ nullable: true })
+  csdnArticleId?: string; // CSDN 文章ID
+
+  @Column({ nullable: true })
+  csdnArticleUrl?: string; // CSDN 文章链接
+
+  @Column({ type: "simple-array", nullable: true })
+  csdnTags?: string[]; // CSDN 标签列表（用于显示）
+
+  @Column({ nullable: true })
+  csdnDescription?: string; // CSDN 摘要
+
+  @Column({ nullable: true })
+  csdnCoverImage?: string; // CSDN 封面图片
+
+  @Column({ default: "original" })
+  csdnType!: string; // CSDN 文章类型: original-原创, repost-转载, translated-翻译
+
+  @Column({ default: "public" })
+  csdnReadType!: string; // CSDN 可见范围: public-全部可见, private-仅我可见, fans-粉丝可见, vip-VIP可见
+
+  @Column({ nullable: true })
+  csdnStatus?: string; // CSDN 文章状态: draft, published
+
+  @Column({ nullable: true })
+  csdnLastSyncedAt?: Date; // 最后同步到 CSDN 的时间
+
   @ManyToOne(() => User)
   user!: User;
 
