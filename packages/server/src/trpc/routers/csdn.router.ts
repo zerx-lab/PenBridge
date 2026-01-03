@@ -5,7 +5,7 @@ import { t, protectedProcedure } from "../shared";
 import { AppDataSource } from "../../db";
 import { Article } from "../../entities/Article";
 import { getCsdnCookies } from "../../services/csdnAuth";
-import { createCsdnApiClient } from "../../services/csdnApi";
+import { createCsdnApiClient, createCsdnRiskChecker } from "../../services/csdnApi";
 import { transformMarkdownForPlatform } from "../../services/markdownTransformer";
 import { processArticleImages, hasImagesToUpload } from "../../services/imageUpload";
 import { getDataDir } from "../../services/dataDir";
@@ -15,6 +15,29 @@ const UPLOAD_DIR = path.join(getDataDir(), "uploads");
 
 // CSDN 相关路由
 export const csdnRouter = t.router({
+  // 检查风险状态（微信验证）
+  checkRisk: protectedProcedure.query(async () => {
+    const cookies = await getCsdnCookies();
+    if (!cookies) {
+      throw new TRPCError({
+        code: "PRECONDITION_FAILED",
+        message: "请先登录 CSDN 账号",
+      });
+    }
+
+    try {
+      const riskChecker = createCsdnRiskChecker(cookies);
+      const result = await riskChecker.checkRisk();
+      return result;
+    } catch (error) {
+      console.error("[CSDN] 风险检查失败:", error);
+      // 出错时返回不需要验证，让发布流程继续
+      return {
+        needVerify: false,
+      };
+    }
+  }),
+
   // 获取推荐标签
   getRecommendTags: protectedProcedure
     .input(
@@ -172,27 +195,58 @@ export const csdnRouter = t.router({
           const successCount = results.filter((r) => r.success).length;
           console.log(`[CSDN] 图片上传完成: ${successCount}/${results.length} 成功`);
 
-          // 如果有图片上传失败，记录警告但继续发布
+          // 如果有图片上传失败，阻止发布（避免发布包含无效图片的文章）
           const failedImages = results.filter((r) => !r.success);
           if (failedImages.length > 0) {
-            console.warn("[CSDN] 部分图片上传失败:", failedImages.map((r) => r.error));
+            console.error("[CSDN] 图片上传失败，阻止发布:", failedImages.map((r) => r.error));
+            throw new TRPCError({
+              code: "PRECONDITION_FAILED",
+              message: `图片上传失败 (${failedImages.length}/${results.length})，请检查网络连接或重新登录 CSDN 后重试`,
+            });
           }
         }
 
         // 将 Markdown 转换为 HTML
         const htmlContent = client.markdownToHtml(contentToPublish);
 
-        // 发布文章
-        const result = await client.publishArticle({
-          articleId: article.csdnArticleId,
-          title: article.title,
-          markdownContent: contentToPublish,
-          htmlContent,
-          tags: article.csdnTags || [],
-          description: article.csdnDescription || "",
-          type: (article.csdnType as "original" | "repost" | "translated") || "original",
-          readType: (article.csdnReadType as "public" | "private" | "fans" | "vip") || "public",
-        });
+        // 发布文章（带重试机制，处理 CSDN 临时性安全检查）
+        const MAX_RETRIES = 3;
+        let lastError: Error | null = null;
+        let result: { id: number; url: string; title: string; qrcode: string } | null = null;
+
+        for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+          try {
+            result = await client.publishArticle({
+              articleId: article.csdnArticleId,
+              title: article.title,
+              markdownContent: contentToPublish,
+              htmlContent,
+              tags: article.csdnTags || [],
+              description: article.csdnDescription || "",
+              type: (article.csdnType as "original" | "repost" | "translated") || "original",
+              readType: (article.csdnReadType as "public" | "private" | "fans" | "vip") || "public",
+            });
+            // 发布成功，跳出重试循环
+            break;
+          } catch (err) {
+            lastError = err instanceof Error ? err : new Error(String(err));
+            const isWechatVerifyError = lastError.message.includes("微信扫码") || 
+                                        lastError.message.includes("请使用已绑定的微信");
+            
+            if (isWechatVerifyError && attempt < MAX_RETRIES) {
+              // CSDN 临时性安全检查，等待后重试
+              console.log(`[CSDN] 遇到临时安全检查，等待后重试 (${attempt}/${MAX_RETRIES})...`);
+              await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
+            } else {
+              // 非微信验证错误或已达最大重试次数，直接抛出
+              throw lastError;
+            }
+          }
+        }
+
+        if (!result) {
+          throw lastError || new Error("发布失败");
+        }
 
         // 更新文章状态
         article.csdnArticleId = String(result.id);
@@ -233,19 +287,25 @@ export const csdnRouter = t.router({
 
         // 返回用户友好的错误消息
         let userMessage = "发布失败";
+        let errorCode: "INTERNAL_SERVER_ERROR" | "PRECONDITION_FAILED" = "INTERNAL_SERVER_ERROR";
+        
         if (error instanceof Error) {
           const msg = error.message;
           if (msg.includes("登录") || msg.includes("401")) {
             userMessage = "CSDN 登录已过期，请重新登录";
           } else if (msg.includes("频繁")) {
             userMessage = "操作过于频繁，请稍后再试";
+          } else if (msg.includes("微信扫码") || msg.includes("请使用已绑定的微信扫码")) {
+            // 需要微信验证，返回特定错误码让前端处理
+            userMessage = "WECHAT_VERIFY_REQUIRED";
+            errorCode = "PRECONDITION_FAILED";
           } else {
             userMessage = msg;
           }
         }
 
         throw new TRPCError({
-          code: "INTERNAL_SERVER_ERROR",
+          code: errorCode,
           message: userMessage,
         });
       }
@@ -301,6 +361,16 @@ export const csdnRouter = t.router({
 
           const successCount = results.filter((r) => r.success).length;
           console.log(`[CSDN] 同步草稿: 图片上传完成: ${successCount}/${results.length} 成功`);
+
+          // 如果有图片上传失败，阻止同步（避免同步包含无效图片的文章）
+          const failedImages = results.filter((r) => !r.success);
+          if (failedImages.length > 0) {
+            console.error("[CSDN] 同步草稿: 图片上传失败，阻止同步:", failedImages.map((r) => r.error));
+            throw new TRPCError({
+              code: "PRECONDITION_FAILED",
+              message: `图片上传失败 (${failedImages.length}/${results.length})，请检查网络连接或重新登录 CSDN 后重试`,
+            });
+          }
         }
 
         // 将 Markdown 转换为 HTML

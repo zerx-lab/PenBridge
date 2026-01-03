@@ -638,7 +638,8 @@ export class CsdnApiClient {
   }> {
     const path = "/resource-api/v1/image/direct/upload/signature";
     const nonce = this.generateUuid();
-    const timestamp = Date.now().toString();
+    // 重要：时间戳需要精确到秒（末尾为000），这是 CSDN API 的要求
+    const timestamp = (Math.floor(Date.now() / 1000) * 1000).toString();
 
     const accept = "application/json, text/plain, */*";
     const contentType = "application/json;charset=UTF-8";
@@ -778,8 +779,8 @@ export class CsdnApiClient {
     log("图片API签名串:", JSON.stringify(stringToSign));
 
     // x-ca-key: 260196572 对应的 appSecret
-    // 来源: CSDN 编辑器 JS 代码分析
-    const appSecret = "tqfkayobsv7lixpnzueh0g293wmdjc8r";
+    // 来源: CSDN csdn-upload.js (https://g.csdnimg.cn/csdn-upload/1.0.9/csdn-upload.js)
+    const appSecret = "t5PaqxVQpWoHgLGt7XPIvd5ipJcwJTU7";
 
     const signature = crypto
       .createHmac("sha256", appSecret)
@@ -979,6 +980,148 @@ export class CsdnApiClient {
 
     return html;
   }
+}
+
+// ==================== 风险检查 API ====================
+
+/**
+ * 微信验证二维码 URL 生成
+ * 用于构建微信扫码验证的二维码链接
+ */
+export interface WechatVerifyInfo {
+  /** 是否需要微信验证 */
+  needVerify: boolean;
+  /** 微信验证二维码 URL */
+  qrCodeUrl?: string;
+  /** 验证时间戳（用于构建 URL） */
+  timestamp?: number;
+}
+
+/**
+ * 风险检查响应
+ */
+export interface RiskCheckResponse {
+  code: string;
+  code_error?: number;
+  message: string;
+  status: boolean;
+}
+
+/**
+ * CSDN 风险检查 API
+ * 当发布文章时，可能需要进行微信扫码验证
+ * 
+ * 流程：
+ * 1. 调用 checkRisk() 检查是否需要验证
+ * 2. 如果需要验证，会返回 code_error 时间戳
+ * 3. 使用该时间戳构建微信二维码 URL
+ * 4. 用户扫码验证后，重新发布文章
+ */
+export class CsdnRiskChecker {
+  private cookies: CsdnCookies;
+  private cookieHeader: string;
+
+  constructor(cookiesJson: string) {
+    this.cookies = JSON.parse(cookiesJson).reduce((acc: CsdnCookies, cookie: { name: string; value: string }) => {
+      if (cookie.name && cookie.value) {
+        acc[cookie.name] = cookie.value;
+      }
+      return acc;
+    }, { UserToken: "", UserName: "" });
+    this.cookieHeader = Object.entries(this.cookies)
+      .filter(([, value]) => value)
+      .map(([key, value]) => `${key}=${value}`)
+      .join("; ");
+  }
+
+  /**
+   * 获取用户名
+   */
+  getUsername(): string {
+    return this.cookies.UserName;
+  }
+
+  /**
+   * 检查风险状态
+   * API: POST https://passport.csdn.net/v1/api/user/risk/check
+   * 
+   * @returns 风险检查结果，如果需要验证返回 qrCodeUrl
+   */
+  async checkRisk(): Promise<WechatVerifyInfo> {
+    const url = "https://passport.csdn.net/v1/api/user/risk/check";
+    
+    const requestBody = {
+      username: this.cookies.UserName,
+      biz: "blog",
+      subBiz: "article",
+    };
+
+    log("风险检查请求:", requestBody);
+
+    try {
+      const response = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json;charset=UTF-8",
+          Accept: "application/json, text/plain, */*",
+          Cookie: this.cookieHeader,
+          Origin: "https://editor.csdn.net",
+          Referer: "https://editor.csdn.net/",
+          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36",
+        },
+        body: JSON.stringify(requestBody),
+      });
+
+      const result: RiskCheckResponse = await response.json();
+      log("风险检查响应:", result);
+
+      // code: "1239" 表示需要微信验证
+      if (result.code === "1239" && result.code_error) {
+        const timestamp = result.code_error;
+        const qrCodeUrl = this.buildWechatQrCodeUrl(timestamp);
+        
+        log("需要微信验证, 二维码 URL:", qrCodeUrl);
+        
+        return {
+          needVerify: true,
+          qrCodeUrl,
+          timestamp,
+        };
+      }
+
+      // code: "200" 或 status: true 表示不需要验证
+      return {
+        needVerify: false,
+      };
+    } catch (error) {
+      log("风险检查失败:", error);
+      // 出错时假设不需要验证，让发布流程继续
+      return {
+        needVerify: false,
+      };
+    }
+  }
+
+  /**
+   * 构建微信扫码验证二维码 URL
+   * 
+   * @param timestamp - 从 checkRisk 返回的 code_error 时间戳
+   * @returns 微信扫码二维码 URL
+   */
+  private buildWechatQrCodeUrl(timestamp: number): string {
+    const redirectUri = encodeURIComponent(
+      `https://passport.csdn.net/v1/service/thirdCheck/checkThirdAccount?thirdAccountType=weixin&u=${timestamp}`
+    );
+    
+    return `https://open.weixin.qq.com/connect/qrconnect?appid=wx0ae11b6a28b4b9fc&scope=snsapi_login&redirect_uri=${redirectUri}&state=csdn&login_type=jssdk&self_redirect=true`;
+  }
+}
+
+/**
+ * 创建风险检查器
+ */
+export function createCsdnRiskChecker(cookiesJson: string): CsdnRiskChecker {
+  return new CsdnRiskChecker(cookiesJson);
 }
 
 /**

@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { message } from "antd";
 import { Loader2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -13,6 +13,7 @@ import {
 import { NativeSelect } from "@/components/ui/native-select";
 import { trpc } from "@/utils/trpc";
 import CsdnTagSelect from "./CsdnTagSelect";
+import CsdnWechatVerifyDialog from "./CsdnWechatVerifyDialog";
 
 // CSDN 文章类型选项
 const CSDN_TYPE_OPTIONS = [
@@ -64,6 +65,10 @@ export function CsdnPublishDialog({
   const [description, setDescription] = useState(initialDescription);
   const [type, setType] = useState<string>(initialType);
   const [readType, setReadType] = useState<string>(initialReadType);
+  
+  // 微信验证状态
+  const [showWechatVerify, setShowWechatVerify] = useState(false);
+  const [wechatQrCodeUrl, setWechatQrCodeUrl] = useState("");
 
   const trpcUtils = trpc.useContext();
 
@@ -104,9 +109,56 @@ export function CsdnPublishDialog({
     },
     onError: (error: Error) => {
       message.destroy("publish");
+      
+      // 检查是否需要微信验证
+      if (error.message === "WECHAT_VERIFY_REQUIRED") {
+        handleWechatVerifyRequired();
+        return;
+      }
+      
       message.error(`发布失败: ${error.message}`);
     },
   });
+
+  // 处理需要微信验证的情况（后端已重试 3 次仍失败）
+  const handleWechatVerifyRequired = useCallback(async () => {
+    message.info("正在获取微信验证二维码...");
+    
+    try {
+      // 调用风险检查接口获取二维码 URL
+      const riskResult = await trpcUtils.csdn.checkRisk.fetch();
+      
+      if (riskResult.needVerify && riskResult.qrCodeUrl) {
+        setWechatQrCodeUrl(riskResult.qrCodeUrl);
+        setShowWechatVerify(true);
+      } else {
+        // 风险检查返回不需要验证，但发布仍然失败
+        // 提示用户可以重试或反馈问题
+        message.warning("CSDN 安全验证异常，请点击「确认发布」重试，如多次失败请反馈问题");
+      }
+    } catch (err) {
+      console.error("获取微信验证二维码失败:", err);
+      message.warning("获取验证二维码失败，请点击「确认发布」重试，如多次失败请反馈问题");
+    }
+  }, [trpcUtils.csdn.checkRisk]);
+
+  // 微信验证完成后重试发布
+  const handleWechatVerifyComplete = useCallback(() => {
+    message.info("正在重新发布文章...");
+    setShowWechatVerify(false);
+    
+    // 延迟一点再发布，给服务器时间处理验证结果
+    setTimeout(() => {
+      message.loading({ content: "正在发布文章到 CSDN...", key: "publish", duration: 0 });
+      publishMutation.mutate({ id: articleId });
+    }, 1000);
+  }, [articleId, publishMutation]);
+
+  // 取消微信验证
+  const handleWechatVerifyCancel = useCallback(() => {
+    setShowWechatVerify(false);
+    message.info("已取消发布");
+  }, []);
 
   const handlePublish = async () => {
     // 验证标签
@@ -120,12 +172,7 @@ export function CsdnPublishDialog({
       return;
     }
 
-    // 验证摘要
-    if (!description.trim()) {
-      message.error("请填写文章摘要");
-      return;
-    }
-
+    // 验证摘要长度（摘要为选填项）
     if (description.length > 256) {
       message.error("摘要不能超过256个字符");
       return;
@@ -158,6 +205,7 @@ export function CsdnPublishDialog({
   const isOverLimit = descriptionLength > 256;
 
   return (
+    <>
     <LightDialog open={open} onOpenChange={onOpenChange} className="sm:max-w-[520px]">
       {/* 关闭按钮 */}
       <button
@@ -215,10 +263,10 @@ export function CsdnPublishDialog({
         {/* 摘要 */}
         <div className="space-y-2">
           <Label>
-            文章摘要 <span className="text-destructive">*</span>
+            文章摘要
           </Label>
           <textarea
-            placeholder="请输入文章摘要（必填，最多256字）"
+            placeholder="请输入文章摘要（选填，最多256字）"
             rows={3}
             value={description}
             onChange={(e) => setDescription(e.target.value)}
@@ -247,6 +295,16 @@ export function CsdnPublishDialog({
         </Button>
       </LightDialogFooter>
     </LightDialog>
+
+    {/* 微信验证弹窗 */}
+    <CsdnWechatVerifyDialog
+      open={showWechatVerify}
+      onOpenChange={setShowWechatVerify}
+      qrCodeUrl={wechatQrCodeUrl}
+      onVerifyComplete={handleWechatVerifyComplete}
+      onCancel={handleWechatVerifyCancel}
+    />
+    </>
   );
 }
 
