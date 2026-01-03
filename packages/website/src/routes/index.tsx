@@ -70,17 +70,17 @@ const screenshots = {
   dashboard: {
     src: "/screenshot-dashboard.png",
     title: "仪表盘",
-    description: "直观的数据统计与快捷操作",
+    description: "直观的数据统计、定时任务管理、快捷操作入口",
   },
   editor: {
-    src: "/screenshot-editor.png", 
+    src: "/screenshot-editor.png",
     title: "编辑器",
-    description: "沉浸式 Markdown 编辑体验",
+    description: "Milkdown 编辑器，支持斜杠命令、代码高亮、目录导航",
   },
   ai: {
     src: "/screenshot-ai-agent.png",
     title: "AI 助手",
-    description: "智能 AI 助手，帮你优化文章、生成摘要、翻译内容",
+    description: "多模型支持、工具调用、差异预览、深度思考模式",
   },
 };
 
@@ -218,8 +218,8 @@ function HeroSection() {
             variants={fadeInUp}
             className="text-lg sm:text-xl text-muted-foreground max-w-2xl mx-auto mb-10"
           >
-            PenBridge 是一款桌面应用，帮助你管理文章并一键发布到腾讯云开发者社区、掘金等技术平台。
-            支持 Markdown 编辑、定时发布、多平台同步。
+            PenBridge 是一款跨平台文章管理工具，一键发布到腾讯云、掘金等技术平台。
+            内置 AI 智能助手，支持定时发布、邮件通知，桌面应用/Docker/Web 多种部署方式。
           </motion.p>
 
           {/* CTA 按钮 */}
@@ -277,32 +277,32 @@ function FeaturesSection() {
     {
       icon: FileText,
       title: "沉浸式编辑",
-      description: "类 Obsidian 风格的 Markdown 编辑器，专注写作，所见即所得。",
+      description: "基于 Milkdown 的 Markdown 编辑器，支持斜杠命令、代码高亮、目录导航、Word 导入。",
     },
     {
       icon: Upload,
       title: "多平台发布",
-      description: "一键发布到腾讯云开发者社区、掘金等技术平台，告别重复操作。",
+      description: "一键发布到腾讯云开发者社区、掘金，支持分类标签、封面图、草稿保存。",
     },
     {
       icon: Clock,
-      title: "定时发布",
-      description: "支持设定发布时间，自动在指定时间发布文章，轻松管理内容日历。",
+      title: "智能调度",
+      description: "定时发布、失败自动重试、每日登录状态探测、邮件通知，一切自动化。",
     },
     {
       icon: Settings,
-      title: "自动登录",
-      description: "首次手动登录后自动保存状态，后续操作无需重复登录。",
+      title: "多种部署",
+      description: "支持桌面应用、Docker 部署、Web 版三种方式，满足不同使用场景。",
     },
     {
       icon: Zap,
-      title: "AI 辅助",
-      description: "内置 AI 助手，帮助你优化文章、生成摘要、翻译内容。",
+      title: "AI 智能助手",
+      description: "支持 OpenAI、智谱、DeepSeek、GitHub Copilot，可直接修改文章、差异预览。",
     },
     {
       icon: Shield,
-      title: "本地优先",
-      description: "数据存储在本地，隐私安全有保障。开源透明，代码可审计。",
+      title: "安全可控",
+      description: "数据本地存储，支持加密导出导入、多用户管理。开源透明，代码可审计。",
     },
   ];
 

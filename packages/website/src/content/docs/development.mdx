@@ -1,17 +1,73 @@
 # 开发指南
 
-## 本地开发
+## 项目概述
 
-PenBridge 是开源项目，欢迎贡献代码。
+PenBridge 是一个跨平台文章管理与发布工具，采用现代化的 Monorepo 架构。
 
 ### 技术栈
 
-- **前端**: React 19 + TypeScript + Tailwind CSS
-- **桌面**: Electron
-- **后端**: Bun + Hono + tRPC
-- **数据库**: SQLite (sql.js)
+| 层级 | 技术 |
+|------|------|
+| 前端 | React 19 + TypeScript + Tailwind CSS 4 |
+| 路由 | TanStack Router |
+| 状态管理 | TanStack Query + tRPC |
+| 编辑器 | Milkdown (Markdown WYSIWYG) |
+| 后端 | Bun + Hono + tRPC |
+| 数据库 | SQLite (sql.js) + TypeORM |
+| 桌面 | Electron |
+| AI | Vercel AI SDK |
 
-### 开发环境
+## 项目结构
+
+```
+PenBridge/
+├── packages/
+│   ├── server/          # 后端服务
+│   │   ├── src/
+│   │   │   ├── entities/    # TypeORM 数据实体
+│   │   │   ├── services/    # 业务逻辑服务
+│   │   │   ├── trpc/        # tRPC 路由定义
+│   │   │   ├── routes/      # HTTP 路由（上传、AI 等）
+│   │   │   └── db/          # 数据库配置
+│   │   └── docker-compose.prod.yml
+│   │
+│   ├── web/             # 前端应用
+│   │   ├── src/
+│   │   │   ├── components/  # React 组件
+│   │   │   ├── routes/      # 页面路由
+│   │   │   ├── hooks/       # 自定义 Hooks
+│   │   │   └── lib/         # 工具函数
+│   │   └── index.html
+│   │
+│   ├── website/         # 官网
+│   │   ├── src/
+│   │   │   ├── content/     # MDX 文档
+│   │   │   └── routes/      # 页面
+│   │   └── api/             # Vercel API
+│   │
+│   └── shared/          # 共享类型定义
+│
+├── electron/            # Electron 桌面应用
+│   ├── src/
+│   │   ├── main.ts          # 主进程
+│   │   ├── preload.ts       # 预加载脚本
+│   │   ├── localServer.ts   # 嵌入式后端
+│   │   └── auth/            # 平台认证
+│   └── resources/
+│
+├── docs/                # 开发文档
+└── scripts/             # 构建脚本
+```
+
+## 本地开发
+
+### 环境要求
+
+- [Bun](https://bun.sh/) v1.0+
+- Node.js 18+ (部分工具依赖)
+- Git
+
+### 快速开始
 
 ```bash
 # 克隆仓库
@@ -21,32 +77,232 @@ cd PenBridge
 # 安装依赖
 bun install
 
-# 启动开发服务器
-bun run dev:server  # 启动后端
-bun run dev:web     # 启动前端
+# 启动后端 (端口 3000)
+bun run dev:server
+
+# 新开终端，启动前端 (端口 5173)
+bun run dev:web
+
+# 可选：启动官网 (端口 5174)
+bun run dev:website
 ```
 
-### 项目结构
+### 开发命令
+
+| 命令 | 说明 |
+|------|------|
+| `bun run dev:server` | 启动后端开发服务器 |
+| `bun run dev:web` | 启动前端开发服务器 |
+| `bun run dev:website` | 启动官网开发服务器 |
+| `bun run dev:electron` | 启动 Electron 开发模式 |
+| `bun run build` | 构建所有包 |
+| `bun run build:electron` | 构建 Electron 应用 |
+| `bun run lint` | 运行 ESLint 检查 |
+| `bun run typecheck` | TypeScript 类型检查 |
+
+## 后端架构
+
+### 数据实体
+
+主要数据实体 (`packages/server/src/entities/`):
+
+| 实体 | 说明 |
+|------|------|
+| `Article` | 文章 |
+| `Folder` | 文件夹 |
+| `User` | 用户账户 |
+| `AdminUser` | 管理员 |
+| `AdminSession` | 登录会话 |
+| `ScheduledTask` | 定时任务 |
+| `AIProvider` | AI 服务商配置 |
+| `AIChat` | AI 聊天记录 |
+| `EmailConfig` | 邮件配置 |
+| `CopilotAuth` | GitHub Copilot 令牌 |
+
+### tRPC 路由
+
+API 路由 (`packages/server/src/trpc/routers/`):
+
+| 路由 | 说明 |
+|------|------|
+| `article` | 文章 CRUD |
+| `folder` | 文件夹管理 |
+| `auth` | 用户认证 |
+| `adminAuth` | 管理员认证 |
+| `adminUser` | 用户管理 |
+| `schedule` | 定时任务 |
+| `aiConfig` | AI 配置管理 |
+| `aiChat` | AI 聊天 |
+| `copilotAuth` | Copilot 认证 |
+| `juejin` | 掘金平台 API |
+| `juejinAuth` | 掘金认证 |
+| `emailConfig` | 邮件配置 |
+| `dataTransfer` | 数据导入导出 |
+| `sync` | 同步状态 |
+
+### 业务服务
+
+核心服务 (`packages/server/src/services/`):
+
+| 服务 | 说明 |
+|------|------|
+| `tencentApi` | 腾讯云 API 封装 |
+| `juejinApi` | 掘金 API 封装 |
+| `articleSync` | 文章同步服务 |
+| `scheduler` | 定时任务调度 |
+| `aiProviderAdapter` | AI 服务适配器 |
+| `aiTools` | AI 工具定义 |
+| `emailService` | 邮件发送服务 |
+| `imageUpload` | 图片上传服务 |
+| `imageCleanup` | 图片清理服务 |
+| `dataExportImport` | 数据导入导出 |
+
+### AI 服务架构
+
+AI 模块采用适配器模式：
 
 ```
-PenBridge/
-├── electron/        # Electron 桌面应用
-├── packages/
-│   ├── server/      # 后端服务
-│   ├── web/         # 前端应用
-│   ├── shared/      # 共享类型
-│   └── website/     # 官网
-└── docs/            # 文档
+aiProviderAdapter
+├── OpenAI SDK Adapter      # OpenAI 官方 API
+├── OpenAI Compatible       # 兼容 OpenAI 的第三方 API
+└── GitHub Copilot Adapter  # GitHub Copilot
 ```
 
-### 贡献代码
+工具调用流程：
 
-1. Fork 仓库
-2. 创建功能分支
-3. 提交代码
-4. 发起 Pull Request
+1. 前端发送 AI 请求
+2. 后端调用 AI 服务
+3. AI 返回工具调用请求
+4. 前端显示权限确认
+5. 用户确认后执行工具
+6. 工具结果返回 AI
+7. AI 生成最终响应
 
-详细指南请参考 [CONTRIBUTING.md](https://github.com/ZeroHawkeye/PenBridge/blob/main/CONTRIBUTING.md)
+## 前端架构
+
+### 页面路由
+
+主要页面 (`packages/web/src/routes/`):
+
+| 路由 | 说明 |
+|------|------|
+| `/` | 仪表盘/文章列表 |
+| `/login` | 登录页 |
+| `/setup` | 初始化向导 |
+| `/settings` | 设置页 |
+| `/articles/[id]/editor` | 文章编辑器 |
+
+### 核心组件
+
+重要组件 (`packages/web/src/components/`):
+
+| 组件 | 说明 |
+|------|------|
+| `MilkdownEditor` | Markdown 编辑器 |
+| `ArticleEditorLayout` | 编辑器布局 |
+| `FileTree` | 文件树 |
+| `TableOfContents` | 目录导航 |
+| `AIChatPanel` | AI 对话面板 |
+| `TencentPublishDialog` | 腾讯云发布对话框 |
+| `JuejinPublishDialog` | 掘金发布对话框 |
+| `SchedulePublishDialog` | 定时发布对话框 |
+
+### tRPC 客户端
+
+```typescript
+// 使用 tRPC 调用 API
+import { trpc } from '@/lib/trpc';
+
+// 查询文章列表
+const articles = trpc.article.list.useQuery();
+
+// 创建文章
+const createArticle = trpc.article.create.useMutation();
+```
+
+## Electron 架构
+
+### 主进程
+
+主进程职责 (`electron/src/main.ts`):
+
+- 创建应用窗口
+- 启动嵌入式后端服务
+- 处理系统级事件
+- 自动更新管理
+
+### 预加载脚本
+
+预加载脚本 (`electron/src/preload.ts`) 暴露的 API:
+
+- `window.electron.openExternal(url)` - 打开外部链接
+- `window.electron.platform` - 当前平台
+- `window.electron.versions` - Electron 版本信息
+
+### 平台认证
+
+Electron 中的平台认证 (`electron/src/auth/`):
+
+- 使用 BrowserWindow 打开登录页面
+- 监听 Cookie 变化
+- 登录成功后保存 Cookie 到后端
+
+## 添加新平台
+
+添加新的发布平台支持：
+
+### 1. 后端 API
+
+创建平台 API 服务 (`packages/server/src/services/`):
+
+```typescript
+// newPlatformApi.ts
+export class NewPlatformApi {
+  async publish(article: Article, options: PublishOptions) {
+    // 实现发布逻辑
+  }
+
+  async saveDraft(article: Article) {
+    // 实现草稿保存
+  }
+}
+```
+
+### 2. tRPC 路由
+
+添加 tRPC 路由 (`packages/server/src/trpc/routers/`):
+
+```typescript
+// newPlatform.router.ts
+export const newPlatformRouter = router({
+  publish: protectedProcedure
+    .input(publishSchema)
+    .mutation(async ({ input }) => {
+      // 调用 API 服务
+    }),
+});
+```
+
+### 3. 前端对话框
+
+创建发布对话框组件:
+
+```typescript
+// NewPlatformPublishDialog.tsx
+export function NewPlatformPublishDialog() {
+  // 实现发布表单
+}
+```
+
+### 4. 更新 Article 实体
+
+添加平台特定字段:
+
+```typescript
+// Article.ts
+@Column({ nullable: true })
+newPlatformArticleId?: string;
+```
 
 ## 代码规范
 
@@ -54,16 +310,47 @@ PenBridge/
 
 - 使用严格模式
 - 优先使用函数式组件
-- 使用 ESLint + Prettier 格式化
+- 明确的类型定义，避免 `any`
+- 使用 Zod 进行运行时校验
+
+### 代码风格
+
+- 使用 ESLint + Prettier
+- 2 空格缩进
+- 使用单引号
+- 末尾不加分号
 
 ### Git 提交
 
-- 使用中文提交信息
-- 遵循 Conventional Commits 规范
-- 每个 PR 聚焦单一功能
+遵循 Conventional Commits:
 
-## API 文档
+```
+feat: 添加新功能
+fix: 修复问题
+docs: 更新文档
+refactor: 代码重构
+test: 添加测试
+chore: 构建/工具变更
+```
 
-后端使用 tRPC，API 类型自动推导，无需手动编写文档。
+## 贡献指南
 
-查看 `packages/server/src/trpc/router.ts` 了解所有可用接口。
+### 提交 PR
+
+1. Fork 仓库
+2. 创建功能分支 (`git checkout -b feature/new-feature`)
+3. 提交代码 (`git commit -m 'feat: add new feature'`)
+4. 推送分支 (`git push origin feature/new-feature`)
+5. 创建 Pull Request
+
+### Issue 反馈
+
+- 使用 Issue 模板
+- 提供详细的复现步骤
+- 附上错误日志和截图
+
+## 相关链接
+
+- [GitHub 仓库](https://github.com/ZeroHawkeye/PenBridge)
+- [Issue 反馈](https://github.com/ZeroHawkeye/PenBridge/issues)
+- [功能调研](https://penbridge.vercel.app/survey)

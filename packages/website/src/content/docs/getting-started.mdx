@@ -1,11 +1,13 @@
 # 快速开始
 
-## 安装 PenBridge
+PenBridge 提供三种使用方式：桌面应用、Docker 部署、源码运行。
+
+## 桌面应用（推荐）
 
 ### 系统要求
 
 - **Windows**: Windows 10 或更高版本
-- **macOS**: macOS 10.15 或更高版本
+- **macOS**: macOS 10.15 或更高版本（支持 Intel 和 Apple Silicon）
 - **Linux**: Ubuntu 18.04 或其他主流发行版
 
 ### 下载安装
@@ -13,18 +15,119 @@
 1. 访问 [GitHub Releases](https://github.com/ZeroHawkeye/PenBridge/releases) 页面
 2. 下载对应系统的安装包：
    - Windows: `.exe` 安装程序
-   - macOS: `.dmg` 镜像文件
+   - macOS Intel: `.dmg` (x64)
+   - macOS Apple Silicon: `.dmg` (arm64)
    - Linux: `.AppImage` 或 `.deb` 包
 3. 运行安装程序，按提示完成安装
 
 ### 首次运行
 
-启动 PenBridge 后，你需要：
+启动 PenBridge 后，会进入初始化向导：
 
-1. 设置管理员账户（用于本地数据管理）
-2. 配置要发布的平台账号
+1. **设置管理员账户** - 创建本地管理员用户名和密码
+2. **配置平台账号** - 可稍后在设置中配置
+3. **配置 AI 服务** - 可选，用于启用 AI 辅助功能
+
+## Docker 部署
+
+适合服务器部署或多人协作使用。
+
+### 快速启动
+
+```bash
+# 克隆仓库
+git clone https://github.com/ZeroHawkeye/PenBridge.git
+cd PenBridge/packages/server
+
+# 使用 Docker Compose 启动
+docker compose -f docker-compose.prod.yml up -d
+
+# 访问 http://localhost:3000
+```
+
+### Docker 配置
+
+默认配置：
+- 端口: 3000
+- 数据持久化: `pen-bridge-data` 卷
+- 健康检查: 30秒间隔
+
+自定义端口：
+
+```bash
+docker compose -f docker-compose.prod.yml up -d --build \
+  -e PORT=8080
+```
+
+### 数据备份
+
+```bash
+# 备份数据
+docker cp penbridge:/app/data ./backup
+
+# 恢复数据
+docker cp ./backup penbridge:/app/data
+```
+
+## 源码运行（开发模式）
+
+适合开发者或需要自定义功能。
+
+### 环境要求
+
+- [Bun](https://bun.sh/) v1.0 或更高版本
+- Node.js 18+ （部分工具依赖）
+
+### 启动开发服务器
+
+```bash
+# 克隆仓库
+git clone https://github.com/ZeroHawkeye/PenBridge.git
+cd PenBridge
+
+# 安装依赖
+bun install
+
+# 启动后端 (端口 3000)
+bun run dev:server
+
+# 新开终端，启动前端 (端口 5173)
+bun run dev:web
+```
+
+访问 http://localhost:5173 即可使用。
+
+## 初始化配置
+
+### 管理员账户
+
+首次访问时，需要创建管理员账户：
+
+1. 输入用户名（仅用于本地识别）
+2. 设置密码（本地加密存储）
+3. 完成后自动登录
+
+### 平台账号配置
+
+在设置页面配置发布平台：
+
+1. 点击右上角齿轮图标进入设置
+2. 选择「平台账号」
+3. 点击对应平台的「登录」按钮
+4. 在弹出窗口中完成平台登录
+5. 登录状态自动保存
+
+### AI 服务配置
+
+启用 AI 助手功能：
+
+1. 进入设置 → AI 配置
+2. 添加 AI 服务商（OpenAI、智谱、DeepSeek 等）
+3. 填入 API Key
+4. 选择默认模型
 
 ## 下一步
 
 - [文章编辑](/docs/editor) - 了解 Markdown 编辑器的使用
 - [发布文章](/docs/publishing) - 学习如何发布到各平台
+- [AI 助手](/docs/ai-assistant) - 使用 AI 辅助写作
