@@ -33,7 +33,9 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
-import { EditorSwitcher, type EditorSwitcherRef } from "@/components/editors";
+import { EditorSwitcher, EDITOR_ICONS, EDITOR_LABELS, EDITOR_DESCRIPTIONS, type EditorSwitcherRef, type VditorMode } from "@/components/editors";
+import { Dropdown, Tooltip as AntTooltip } from "antd";
+import { ChevronDown, Check } from "lucide-react";
 import { isLineNumbersEnabled } from "@/components/settings/EditorSettings";
 import { TableOfContents, HeadingItem } from "@/components/TableOfContents";
 import { EditorSearchBox } from "@/components/EditorSearchBox";
@@ -158,6 +160,22 @@ export function ArticleEditorLayout({
   
   // 行号显示状态（从设置中读取）
   const [showLineNumbers] = useState(() => isLineNumbersEnabled());
+  
+  // 编辑器模式状态（从偏好设置初始化）
+  const [editorMode, setEditorMode] = useState<VditorMode>(() => {
+    const saved = localStorage.getItem("editor-type-preference");
+    if (saved === "ir" || saved === "wysiwyg" || saved === "sv") {
+      return saved;
+    }
+    return "ir";
+  });
+  
+  // 处理编辑器模式切换
+  const handleEditorModeChange = useCallback((mode: VditorMode) => {
+    setEditorMode(mode);
+    // 通过 ref 调用 EditorSwitcher 的切换方法
+    milkdownEditorRef.current?.switchEditorType(mode);
+  }, []);
 
   // 内部 ref，如果外部没有提供
   const internalTitleInputRef = useRef<HTMLInputElement>(null);
@@ -654,7 +672,49 @@ export function ArticleEditorLayout({
                 fontWeight: '550' 
               }}
             />
-            <div className="h-px bg-border/40 mt-3 mb-4" />
+            {/* 分隔线 + 编辑器模式切换按钮 */}
+            <div className="flex items-center justify-between mt-3 mb-4">
+              <div className="flex-1 h-px bg-border/40" />
+              {/* 编辑器模式切换按钮 */}
+              <AntTooltip title="切换编辑器模式" placement="bottom">
+                <Dropdown
+                  menu={{
+                    items: (Object.keys(EDITOR_LABELS) as VditorMode[]).map((mode) => ({
+                      key: mode,
+                      label: (
+                        <div className="flex items-center gap-3 py-1">
+                          <span className="shrink-0">{EDITOR_ICONS[mode]}</span>
+                          <div className="flex-1 min-w-0">
+                            <div className="font-medium">{EDITOR_LABELS[mode]}</div>
+                            <div className="text-xs text-muted-foreground truncate">
+                              {EDITOR_DESCRIPTIONS[mode]}
+                            </div>
+                          </div>
+                          {mode === editorMode && (
+                            <Check className="h-4 w-4 shrink-0 text-primary" />
+                          )}
+                        </div>
+                      ),
+                      onClick: () => handleEditorModeChange(mode),
+                    })),
+                  }}
+                  trigger={["click"]}
+                  placement="bottomRight"
+                >
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 gap-1.5 text-muted-foreground hover:text-foreground shrink-0 ml-3"
+                  >
+                    {EDITOR_ICONS[editorMode]}
+                    <span className="text-xs">
+                      {EDITOR_LABELS[editorMode]}
+                    </span>
+                    <ChevronDown className="h-3 w-3" />
+                  </Button>
+                </Dropdown>
+              </AntTooltip>
+            </div>
 
             {/* Markdown 编辑器 / 骨架屏 */}
             {isContentLoading ? (
@@ -668,8 +728,10 @@ export function ArticleEditorLayout({
                 placeholder="开始写作..."
                 className="min-h-[calc(100vh-200px)]"
                 articleId={articleId}
-                showSwitcher={true}
+                showSwitcher={false}
                 showLineNumbers={showLineNumbers}
+                initialEditorType={editorMode}
+                onEditorTypeChange={setEditorMode}
               />
             )}
           </div>

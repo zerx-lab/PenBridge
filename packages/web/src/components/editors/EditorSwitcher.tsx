@@ -20,8 +20,8 @@ import {
 } from "./types";
 import { VditorEditor } from "./VditorEditor";
 
-// 编辑器图标
-const EDITOR_ICONS: Record<VditorMode, React.ReactNode> = {
+// 编辑器图标（导出供外部使用）
+export const EDITOR_ICONS: Record<VditorMode, React.ReactNode> = {
   ir: <Eye className="h-4 w-4" />,
   wysiwyg: <Code className="h-4 w-4" />,
   sv: <Columns className="h-4 w-4" />,
@@ -38,6 +38,11 @@ export interface EditorSwitcherProps extends BaseEditorProps {
   editorKey?: number;
   // 是否显示行号（Vditor 暂不支持，保留接口兼容）
   showLineNumbers?: boolean;
+  // 自定义渲染切换按钮（传入此属性时，内部按钮不渲染）
+  renderSwitcher?: (props: {
+    currentMode: VditorMode;
+    onModeChange: (mode: VditorMode) => void;
+  }) => React.ReactNode;
 }
 
 export interface EditorSwitcherRef extends EditorRef {
@@ -55,6 +60,7 @@ function EditorSwitcherInner(
     onEditorTypeChange,
     showSwitcher = true,
     editorKey,
+    renderSwitcher,
     ...editorProps
   }: EditorSwitcherProps,
   ref: React.ForwardedRef<EditorSwitcherRef>
@@ -155,32 +161,43 @@ function EditorSwitcherInner(
   // 计算最终的 editor key
   const finalEditorKey = (editorKey ?? 0) + refreshKey;
 
+  // 默认的切换按钮组件
+  const defaultSwitcherButton = (
+    <Tooltip title="切换编辑器模式" placement="bottom">
+      <Dropdown
+        menu={{ items: dropdownItems }}
+        trigger={["click"]}
+        placement="bottomRight"
+      >
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-8 gap-1.5 text-muted-foreground hover:text-foreground"
+        >
+          {EDITOR_ICONS[editorMode]}
+          <span className="text-xs hidden sm:inline">
+            {EDITOR_LABELS[editorMode]}
+          </span>
+          <ChevronDown className="h-3 w-3" />
+        </Button>
+      </Dropdown>
+    </Tooltip>
+  );
+
   return (
     <div className="editor-switcher relative">
-      {/* 编辑器切换按钮 */}
-      {showSwitcher && (
+      {/* 编辑器切换按钮 - 仅在没有自定义渲染器时显示内部按钮 */}
+      {showSwitcher && !renderSwitcher && (
         <div className="absolute top-0 right-0 z-10">
-          <Tooltip title="切换编辑器模式" placement="bottom">
-            <Dropdown
-              menu={{ items: dropdownItems }}
-              trigger={["click"]}
-              placement="bottomRight"
-            >
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-8 gap-1.5 text-muted-foreground hover:text-foreground"
-              >
-                {EDITOR_ICONS[editorMode]}
-                <span className="text-xs hidden sm:inline">
-                  {EDITOR_LABELS[editorMode]}
-                </span>
-                <ChevronDown className="h-3 w-3" />
-              </Button>
-            </Dropdown>
-          </Tooltip>
+          {defaultSwitcherButton}
         </div>
       )}
+      
+      {/* 自定义渲染切换按钮 */}
+      {renderSwitcher?.({
+        currentMode: editorMode,
+        onModeChange: handleEditorModeChange,
+      })}
 
       {/* Vditor 编辑器 */}
       <VditorEditor

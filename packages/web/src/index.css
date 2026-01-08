@@ -668,14 +668,39 @@ a .text-foreground,
 
 .vditor-editor-container .vditor-ir,
 .vditor-editor-container .vditor-wysiwyg,
-.vditor-editor-container .vditor-sv,
 .vditor-editor-container.vditor .vditor-ir,
-.vditor-editor-container.vditor .vditor-wysiwyg,
-.vditor-editor-container.vditor .vditor-sv {
+.vditor-editor-container.vditor .vditor-wysiwyg {
   border: none !important;
   box-shadow: none !important;
   background: transparent !important;
   min-width: 100% !important;
+}
+
+/* 分屏预览模式（sv）样式 - 不设置 min-width 100% 以允许分屏布局 */
+.vditor-editor-container .vditor-sv,
+.vditor-editor-container.vditor .vditor-sv {
+  border: none !important;
+  box-shadow: none !important;
+  background: transparent !important;
+}
+
+/* 分屏预览模式下，源码编辑器和预览面板各占 50% */
+.vditor-editor-container .vditor-content:has(.vditor-sv[style*="display: block"]) .vditor-sv,
+.vditor-editor-container.vditor .vditor-content:has(.vditor-sv[style*="display: block"]) .vditor-sv {
+  width: 50% !important;
+  min-width: 50% !important;
+  max-width: 50% !important;
+  flex: 0 0 50% !important;
+}
+
+.vditor-editor-container .vditor-content:has(.vditor-sv[style*="display: block"]) .vditor-preview,
+.vditor-editor-container.vditor .vditor-content:has(.vditor-sv[style*="display: block"]) .vditor-preview {
+  width: 50% !important;
+  min-width: 50% !important;
+  max-width: 50% !important;
+  flex: 0 0 50% !important;
+  border-left: 1px solid var(--border) !important;
+  overflow-y: auto !important;
 }
 
 .vditor-editor-container .vditor-reset,
