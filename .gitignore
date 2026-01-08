@@ -42,6 +42,7 @@ packages/video
 nul
 docs/
 opencode/
-lute
+/lute
 # vditor 是本地修改的依赖，需要提交到仓库
+# 注意：上面的 /lute 只忽略根目录的 lute，不影响 vditor/dist/js/lute/
 # vditor 内部的 node_modules 和 dist 由各自的 .gitignore 管理
