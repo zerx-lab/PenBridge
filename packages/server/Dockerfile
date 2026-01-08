@@ -12,6 +12,8 @@ FROM oven/bun:1 AS web-builder
 
 # 接收版本号构建参数
 ARG VERSION=1.0.0
+# 缓存破坏参数 - 当需要强制重新构建前端时修改此值
+ARG CACHE_BUST=2
 
 WORKDIR /app
 
